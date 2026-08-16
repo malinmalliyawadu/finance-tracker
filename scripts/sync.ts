@@ -60,9 +60,20 @@ try {
   runId = run!.id
 
   if (shouldRefresh) {
-    await akahu.refresh()
-    log({ event: 'sync.refresh_requested', settling_ms: REFRESH_SETTLE_MS })
-    await new Promise((resolve) => setTimeout(resolve, REFRESH_SETTLE_MS))
+    // A refresh is an optimisation, not a prerequisite. Akahu refreshes every
+    // account daily on its own schedule, so failing to get a fresher pull is a
+    // reason to log and carry on, never a reason to abandon the sync.
+    try {
+      await akahu.refresh()
+      log({ event: 'sync.refresh_requested', settling_ms: REFRESH_SETTLE_MS })
+      await new Promise((resolve) => setTimeout(resolve, REFRESH_SETTLE_MS))
+    } catch (error) {
+      log({
+        event: 'sync.refresh_unavailable',
+        error: String(error),
+        note: 'continuing with whatever Akahu last pulled',
+      })
+    }
   }
 
   const accounts = await akahu.accounts()

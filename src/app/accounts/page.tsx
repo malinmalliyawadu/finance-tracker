@@ -1,11 +1,24 @@
 import { CsvUpload } from '../../components/csv-upload.tsx'
-import { getAccounts, getRecentSyncs } from '../../lib/queries.ts'
+import { getAccounts, getRecentSyncs, getSettings } from '../../lib/queries.ts'
 import { fullDate, money, plural } from '../../lib/format.ts'
+import { setStatementStartDay } from '../actions.ts'
 
 export const dynamic = 'force-dynamic'
 
+const ordinal = (n: number) => {
+  const suffix = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'
+  return `${n}${suffix}`
+}
+
 export default async function AccountsPage() {
-  const [accounts, syncs] = await Promise.all([getAccounts(), getRecentSyncs(6)])
+  const [accounts, syncs, settings] = await Promise.all([
+    getAccounts(),
+    getRecentSyncs(6),
+    getSettings(),
+  ])
+
+  const startDay = settings.statementStartDay
+  const endDay = startDay === 1 ? 'end of the month' : `${ordinal(startDay - 1)}`
 
   const synced = accounts.filter((account) => account.source === 'akahu')
   const manual = accounts.filter((account) => account.source === 'csv')
@@ -21,6 +34,41 @@ export default async function AccountsPage() {
           </p>
         </div>
       </div>
+
+      <section className="card">
+        <div className="card-head">
+          <div>
+            <h2>Statement period</h2>
+            <p>
+              Every figure in the app is grouped by this. Changing it regroups history
+              immediately — nothing is stored per period, so there is nothing to rebuild.
+            </p>
+          </div>
+        </div>
+
+        <form action={setStatementStartDay} className="toolbar">
+          <div className="field">
+            <label htmlFor="statementStartDay">Starts on the</label>
+            <select id="statementStartDay" name="statementStartDay" defaultValue={startDay}>
+              {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
+                <option key={day} value={day}>
+                  {ordinal(day)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button className="btn" type="submit">
+            Save period
+          </button>
+          <span className="note">
+            {startDay === 1
+              ? 'Calendar months: the 1st to the end of the month.'
+              : `Runs the ${ordinal(startDay)} to the ${endDay} of the following month.`}{' '}
+            Capped at the 28th, because later days do not exist in every month and would leave
+            gaps.
+          </span>
+        </form>
+      </section>
 
       <section className="card">
         <div className="card-head">

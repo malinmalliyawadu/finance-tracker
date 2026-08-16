@@ -40,9 +40,18 @@ export default async function DashboardPage({
     )
   }
 
-  // Defaults to the period we are living in, not the last one that closed.
-  const active = periods.find((p) => p.start === period) ?? periods[0]!
+  // Defaults to the period we are living in — but only once it has something in
+  // it. Bank data runs a few days behind, so for the first days of every period
+  // the current one is genuinely empty, and opening on a blank page is worse
+  // than opening on the most recent period that has anything to show.
+  const requested = period ? periods.find((p) => p.start === period) : undefined
+  const mostRecentWithData = periods.find((p) => p.hasData)
+  const active = requested ?? mostRecentWithData ?? periods[0]!
   const selected = active.start
+
+  const current = periods.find((p) => p.isCurrent)
+  const waitingOnData = !requested && current !== undefined && !current.hasData && !active.isCurrent
+
   const partial = active.isCurrent && active.elapsedDays < active.totalDays
 
   const [sieve, trend, categories, health, pace] = await Promise.all([
@@ -122,13 +131,25 @@ export default async function DashboardPage({
         </div>
       )}
 
-      {sieve.totalOut === 0 && active.isCurrent ? (
+      {waitingOnData && current && (
+        <p className="note">
+          {periodLabel(current.start, current.end)} has nothing in it yet
+          {current.elapsedDays === 1
+            ? ', because it started today'
+            : `, ${current.elapsedDays} days in`}
+          . Bank data runs a few days behind.{' '}
+          <Link href={`/?period=${current.start}`}>Open it anyway</Link>, or carry on with the
+          period below.
+        </p>
+      )}
+
+      {sieve.totalOut === 0 ? (
         <section className="card">
           <div className="empty">
-            <strong>Nothing yet this period</strong>
-            {active.elapsedDays === 1
-              ? 'This period started today.'
-              : `${active.elapsedDays} days in, and nothing has come through yet.`}{' '}
+            <strong>Nothing recorded in this period</strong>
+            {active.isCurrent && active.elapsedDays === 1
+              ? 'It started today, and bank data runs a few days behind.'
+              : 'No transactions have come through for these dates.'}{' '}
             {previous && (
               <>
                 <Link href={`/?period=${previous.start}`}>

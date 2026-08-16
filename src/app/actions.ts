@@ -125,6 +125,20 @@ export async function importStatement(
   }
 }
 
+/**
+ * Which day of the month a statement period opens on.
+ *
+ * Capped at 28 by the database, because 29 to 31 do not exist in every month
+ * and any of them would produce periods that skip or double up.
+ */
+export async function setStatementStartDay(formData: FormData): Promise<void> {
+  const day = Number(formData.get('statementStartDay'))
+  if (!Number.isInteger(day) || day < 1 || day > 28) return
+
+  await db`update settings set statement_start_day = ${day} where id`
+  revalidatePath('/', 'layout')
+}
+
 /** The large-purchase threshold. What counts as a decision rather than a habit. */
 export async function setThreshold(formData: FormData): Promise<void> {
   const value = Number(formData.get('threshold'))
