@@ -23,9 +23,7 @@ const EXCLUSION_REASONS: ExclusionReason[] = [
  * the `transactions` view resolves overrides at read time — so the change shows
  * up immediately and the next recompute cannot undo it.
  */
-export async function recategorise(formData: FormData): Promise<void> {
-  const id = String(formData.get('id') ?? '')
-  const verdict = String(formData.get('verdict') ?? '')
+export async function recategorise(id: string, verdict: string): Promise<void> {
   if (!id) return
 
   if (verdict === 'rules') {
