@@ -47,6 +47,24 @@ export function periodLabel(start: Date | string, end: Date | string): string {
   return `${DAY_MONTH.format(toDate(start))} – ${DAY_MONTH_YEAR.format(toDate(end))}`
 }
 
+function ordinal(day: number): string {
+  const teen = day % 100 >= 11 && day % 100 <= 13
+  return `${day}${teen ? 'th' : (['th', 'st', 'nd', 'rd'][day % 10] ?? 'th')}`
+}
+
+/**
+ * How the app's unit of time is cut, in words: "the 16th to the 15th".
+ *
+ * Read from settings rather than written into the copy. The statement day is
+ * configurable, and a page that asserts the 16th while the data is cut on the
+ * 1st is worse than one that says nothing — it teaches the reader to distrust
+ * the labels on everything else.
+ */
+export function periodRule(statementStartDay: number): string {
+  if (statementStartDay === 1) return 'Calendar months.'
+  return `Statement periods, the ${ordinal(statementStartDay)} to the ${ordinal(statementStartDay - 1)}.`
+}
+
 /** Compact label for chart axes. */
 export function periodTick(start: Date | string): string {
   const date = toDate(start)

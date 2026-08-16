@@ -31,11 +31,18 @@ export function Sieve({
   data,
   comparison,
   progress,
+  showHeadline = true,
 }: {
   data: SieveData
   comparison: Comparison
   /** Present only while the period is still running. */
   progress?: Progress
+  /**
+   * The living-costs headline is the same figure the dashboard's first tile
+   * carries. Where that tile is on the page, this one is switched off: the same
+   * number twice in one screen invites the reader to look for the difference.
+   */
+  showHeadline?: boolean
 }) {
   const bands = data.bands
     .filter((band) => band.amount > 0.005)
@@ -101,39 +108,46 @@ export function Sieve({
       </div>
 
       <div>
-        <div className="headline">
-          <div className="eyebrow">
-            {partial ? 'Living costs so far' : 'Living costs'}
-          </div>
-          <div className="headline-value">{moneyWhole(data.living)}</div>
-
-          {progress && (
-            <div className="progress" aria-hidden>
-              <span
-                className="progress-fill"
-                style={{ width: `${(progress.elapsedDays / progress.totalDays) * 100}%` }}
-              />
+        {showHeadline ? (
+          <div className="headline">
+            <div className="eyebrow">
+              {partial ? 'Living costs so far' : 'Living costs'}
             </div>
-          )}
-          {progress && (
+            <div className="headline-value">{moneyWhole(data.living)}</div>
+
+            {progress && (
+              <div className="progress" aria-hidden>
+                <span
+                  className="progress-fill"
+                  style={{ width: `${(progress.elapsedDays / progress.totalDays) * 100}%` }}
+                />
+              </div>
+            )}
+            {progress && (
+              <div className="headline-note">
+                Day {progress.elapsedDays} of {progress.totalDays}
+              </div>
+            )}
+
+            {averageLiving > 0 && (
+              <div className={`headline-delta ${over ? 'delta-over' : 'delta-under'}`}>
+                {over ? '▲' : '▼'} {Math.abs(delta * 100).toFixed(0)}% {comparison.label}
+                <span className="num" style={{ color: 'var(--ink-faint)', fontWeight: 400 }}>
+                  {moneyWhole(averageLiving)}
+                </span>
+              </div>
+            )}
             <div className="headline-note">
-              Day {progress.elapsedDays} of {progress.totalDays}
+              Includes mortgage interest. Investing, card and mortgage payments, and transfers
+              between my own accounts are all excluded.
             </div>
-          )}
-
-          {averageLiving > 0 && (
-            <div className={`headline-delta ${over ? 'delta-over' : 'delta-under'}`}>
-              {over ? '▲' : '▼'} {Math.abs(delta * 100).toFixed(0)}% {comparison.label}
-              <span className="num" style={{ color: 'var(--ink-faint)', fontWeight: 400 }}>
-                {moneyWhole(averageLiving)}
-              </span>
-            </div>
-          )}
-          <div className="headline-note">
-            Includes mortgage interest. Investing, card and mortgage payments, and transfers
-            between my own accounts are all excluded.
           </div>
-        </div>
+        ) : (
+          <p className="note">
+            Living costs include mortgage interest. Investing, card and mortgage payments, and
+            transfers between my own accounts are all excluded.
+          </p>
+        )}
 
         <dl className="stat-list">
           <div className="stat-row">

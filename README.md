@@ -78,7 +78,7 @@ DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/finance
 | `npm run import:csv` | imports a Latitude/Gem statement; `--dry-run`                        |
 | `npm run recompute`  | rebuilds `transactions_enriched` from raw + rules. Fetches nothing.  |
 | `npm run typecheck`  | `tsc --noEmit`                                                       |
-| `npm test`           | engine, cadence, budget and reconciliation tests. Needs `DATABASE_URL`. |
+| `npm test`           | engine, cadence, budget, dashboard and reconciliation tests. Needs `DATABASE_URL`. |
 
 `npm test` deliberately fails rather than skips when `DATABASE_URL` is unset:
 the reconciliation assertions are meant to break CI, and a skipped test that
@@ -104,6 +104,7 @@ src/lib/categorise.ts            the engine: rules in, verdict out. Pure.
 src/lib/recurring.ts             cadence detection from the gaps between charges
 src/lib/queries.ts               every SQL query the pages use
 src/lib/budget.ts                budget verdicts: on track, ahead of pace, over
+src/lib/dashboard.ts             the front page's headline figures and commentary
 src/app/                         the six pages
 docs/schema.md                   the schema and why it is shaped that way
 ```
@@ -145,6 +146,29 @@ spending and none of the surprises is the usual way one turns out to be wrong.
 
 See [docs/schema.md](docs/schema.md) for why the table is versioned rather than
 written per period.
+
+## The dashboard
+
+The front page opens on three figures — living costs so far, what the budget has
+left, and where this pace lands by the end of the period — followed by a short
+list of what is worth saying about the period, and only then by the detail.
+
+The forecast is not a straight-line pro-rate. It scales what has been spent by
+how much of a *normal* period is already behind us, taken from history: for the
+budget, each category's own day-shaping weighted by its limit; for living costs,
+the whole consumption total measured against itself. Early in a period, when
+that share is under 15%, there is no forecast at all rather than a number
+manufactured out of the first few days.
+
+The commentary in `src/lib/dashboard.ts` is a set of rules, each with a
+threshold under which it stays quiet, ranked and capped at four. A dashboard
+that always has four things to tell you has nothing to tell you. Categories with
+no limit set are included: they still have a history, and this is the only place
+one gets measured against it.
+
+Both the figures and the sentences are pure functions over data the page has
+already fetched, so `tests/dashboard.test.ts` pins down what the app is willing
+to assert about someone's money without needing a database.
 
 ## The daily sync
 

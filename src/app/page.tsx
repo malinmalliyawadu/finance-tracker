@@ -1,18 +1,31 @@
 import Link from 'next/link'
 
+import { BudgetTrack } from '../components/budget-track.tsx'
 import { CategoryBars } from '../components/category-bars.tsx'
+import { Commentary } from '../components/commentary.tsx'
+import { HeadlineTiles } from '../components/headline-tiles.tsx'
 import { PeriodPicker } from '../components/period-picker.tsx'
 import { Sieve } from '../components/sieve.tsx'
 import { TrendChart } from '../components/trend-chart.tsx'
 import {
+  getBiggestPurchase,
+  getBudget,
   getCategoryTotals,
   getHealth,
   getPaceComparison,
   getPeriods,
+  getSettings,
   getSieve,
   getTrend,
 } from '../lib/queries.ts'
-import { moneyWhole, periodLabel } from '../lib/format.ts'
+import {
+  comparisonFor,
+  forecastFor,
+  headlineTiles,
+  insightsFor,
+  type Reading,
+} from '../lib/dashboard.ts'
+import { moneyWhole, periodLabel, periodRule } from '../lib/format.ts'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,17 +67,17 @@ export default async function DashboardPage({
 
   const partial = active.isCurrent && active.elapsedDays < active.totalDays
 
-  const [sieve, trend, categories, health, pace] = await Promise.all([
+  const [sieve, trend, categories, health, pace, budget, biggest, settings] = await Promise.all([
     getSieve(selected),
     getTrend(13),
     getCategoryTotals(selected),
     getHealth(),
     partial ? getPaceComparison(selected, active.elapsedDays) : null,
+    getBudget(selected, active.elapsedDays, active.totalDays),
+    getBiggestPurchase(selected),
+    getSettings(),
   ])
 
-  // A part-finished period is compared against the same point in prior periods.
-  // A closed one is compared against whole prior periods, excluding itself so
-  // it is not partly measured against its own value.
   // Only closed periods, and never the selected one. A period still running is
   // a partial total, and averaging it in drags the benchmark down by however
   // far through it we happen to be.
@@ -73,9 +86,22 @@ export default async function DashboardPage({
   const wholePeriodAverage =
     others.length > 0 ? others.reduce((sum, p) => sum + p.living, 0) / others.length : 0
 
-  const comparison = partial
-    ? { average: pace!.average, label: `vs average by day ${active.elapsedDays}` }
-    : { average: wholePeriodAverage, label: 'vs 12-period average' }
+  const reading: Reading = {
+    periodStart: selected,
+    partial,
+    elapsedDays: active.elapsedDays,
+    totalDays: active.totalDays,
+    sieve,
+    budget,
+    pace,
+    wholePeriodAverage,
+    biggest,
+  }
+
+  const comparison = comparisonFor(reading)
+  const forecast = forecastFor(reading)
+  const tiles = headlineTiles(reading)
+  const insights = insightsFor(reading)
 
   const previous = periods.find((p) => p.start < selected && p.hasData)
 
@@ -161,17 +187,71 @@ export default async function DashboardPage({
           </div>
         </section>
       ) : (
-        <section className="card">
-          <Sieve
-            data={sieve}
-            comparison={comparison}
-            progress={
-              partial
-                ? { elapsedDays: active.elapsedDays, totalDays: active.totalDays }
-                : undefined
-            }
-          />
-        </section>
+        <>
+          {budget.exists && (
+            <section className="card">
+              <HeadlineTiles tiles={tiles} />
+
+              <BudgetTrack
+                total={budget.total}
+                spent={budget.spent}
+                expectedByNow={budget.expectedByNow}
+                projected={forecast.budget}
+                partial={partial}
+                elapsedDays={active.elapsedDays}
+              />
+
+              <p className="note track-foot">
+                {partial ? (
+                  <>
+                    Measured against what these categories usually spend by day{' '}
+                    {active.elapsedDays}, not against a straight-line share of the period.{' '}
+                  </>
+                ) : (
+                  <>Every limit as it stood while this period was running. </>
+                )}
+                <Link href={`/budget?period=${selected}`}>See it by category</Link>
+              </p>
+            </section>
+          )}
+
+          {insights.length > 0 && (
+            <section className="card">
+              <div className="card-head">
+                <div>
+                  <h2>What stands out</h2>
+                  <p>
+                    Only what clears a threshold worth acting on. A period with nothing unusual
+                    in it has a short list.
+                  </p>
+                </div>
+              </div>
+              <Commentary insights={insights} />
+            </section>
+          )}
+
+          <section className="card">
+            <div className="card-head">
+              <div>
+                <h2>What counts as spending</h2>
+                <p>
+                  Everything that left the account, with each band that is not spending peeling
+                  off in turn, ending in the one that is.
+                </p>
+              </div>
+            </div>
+            <Sieve
+              data={sieve}
+              comparison={comparison}
+              progress={
+                partial
+                  ? { elapsedDays: active.elapsedDays, totalDays: active.totalDays }
+                  : undefined
+              }
+              showHeadline={!budget.exists}
+            />
+          </section>
+        </>
       )}
 
       <section className="card">
@@ -179,7 +259,7 @@ export default async function DashboardPage({
           <div>
             <h2>Living costs by period</h2>
             <p>
-              Statement periods, the 16th to the 15th. The pale block above each column is
+              {periodRule(settings.statementStartDay)} The pale block above each column is
               investing and transfers — real money, but saving rather than spending.
             </p>
           </div>
