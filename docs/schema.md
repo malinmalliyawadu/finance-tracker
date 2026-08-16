@@ -10,6 +10,7 @@ erDiagram
     categories          ||--o{ rules                 : "a category rule assigns"
     categories          ||--o{ transactions_enriched : classifies
     categories          ||--o{ overrides             : classifies
+    categories          ||--o{ budget_lines          : "is limited by"
     rules               ||--o{ transactions_enriched : "matched by"
     merchant_aliases    ||--o{ transactions_enriched : "named by"
 
@@ -75,6 +76,13 @@ erDiagram
         enum   exclusion_reason
         bool   force_included
         text   note
+    }
+    budget_lines {
+        uuid    id PK
+        uuid    category_id FK
+        date    effective_from "the period this figure starts applying to"
+        numeric amount "null = deliberately not budgeted from here on"
+        text    note
     }
     settings {
         bool   id PK "singleton"
@@ -256,6 +264,38 @@ function it is a settings change. Verified over a two-year run of dates: 730
 days map onto 25 periods with every day inside exactly one, and `start_day` is
 capped at 28 so no month can produce a partial period.
 
+### A budget is versioned, not stored per period
+
+`budget_lines` records an amount and the date it takes effect. The budget in
+force for a period is the newest line at or before that period's start, resolved
+by `budget_for_period(date)` and nowhere else.
+
+The obvious alternative is a row per category per period, and it fails the same
+way a stored period column would: a budget is a standing intention that changes
+two or three times a year, so materialising it against every period means
+writing twenty rows a month forever, and "what was I aiming for in March"
+becomes a question about whether those rows happened to be written. Versioning
+makes the answer structural. Set rent once and every later period inherits it;
+change it in August and July keeps the figure it was actually judged against.
+
+Two details carry weight:
+
+- **`amount` is nullable, and null means "stop budgeting this".** Without it,
+  clearing a limit would have to delete the line, and the older line underneath
+  would resurface as though the decision had never been made.
+- **`effective_from` is a plain date, not a key onto a period.** Periods are
+  computed from `settings.statement_start_day` and move when that setting
+  changes. "Newest line at or before the period start" keeps resolving sensibly
+  across such a change; a stored period key would silently orphan every line.
+
+Expected-to-date is deliberately not a straight-line pro-rate of the limit.
+Rent lands on day one and the power bill on day twenty, so a linear budget line
+reports every fixed cost as a blowout for the first half of the period and then
+quietly recovers. Each category is shaped by its own history instead — the share
+of a typical period's spend that has landed by this day — falling back to
+straight-line only where there is no history to shape it with. It is the same
+argument as the pace comparison on the dashboard, applied per category.
+
 ### `sync_runs`
 
 A daily sync that silently stops returning transactions looks exactly like a
@@ -282,7 +322,7 @@ is no longer "which rows may a client see" — the browser never sees any — bu
 | Role            | Reads      | Writes                                                   |
 | --------------- | ---------- | -------------------------------------------------------- |
 | `finance_owner` | everything | everything. Migrations only.                             |
-| `finance_web`   | everything | `overrides`, `rules`, `merchant_aliases`, `categories`, `settings` |
+| `finance_web`   | everything | `overrides`, `rules`, `merchant_aliases`, `categories`, `budget_lines`, `settings` |
 | `finance_sync`  | everything | `accounts`, `transactions_raw`, `transactions_enriched`, `sync_runs` |
 
 The split is what makes the read-time override design safe: `finance_web` has no

@@ -78,7 +78,7 @@ DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/finance
 | `npm run import:csv` | imports a Latitude/Gem statement; `--dry-run`                        |
 | `npm run recompute`  | rebuilds `transactions_enriched` from raw + rules. Fetches nothing.  |
 | `npm run typecheck`  | `tsc --noEmit`                                                       |
-| `npm test`           | engine, cadence and reconciliation tests. Needs `DATABASE_URL`.      |
+| `npm test`           | engine, cadence, budget and reconciliation tests. Needs `DATABASE_URL`. |
 
 `npm test` deliberately fails rather than skips when `DATABASE_URL` is unset:
 the reconciliation assertions are meant to break CI, and a skipped test that
@@ -103,7 +103,8 @@ scripts/recompute.ts             rebuilds the derived layer
 src/lib/categorise.ts            the engine: rules in, verdict out. Pure.
 src/lib/recurring.ts             cadence detection from the gaps between charges
 src/lib/queries.ts               every SQL query the pages use
-src/app/                         the five pages
+src/lib/budget.ts                budget verdicts: on track, ahead of pace, over
+src/app/                         the six pages
 docs/schema.md                   the schema and why it is shaped that way
 ```
 
@@ -121,6 +122,29 @@ Rules can also be edited directly in the database. Those carry `source =
 Array order in the file is the evaluation order and is load-bearing: pharmacy is
 tested before groceries, exclusions before every category. See
 [docs/schema.md](docs/schema.md).
+
+## Budgets
+
+A budget is a limit per category, set on the Budget page and stored in
+`budget_lines` as an amount plus the period it takes effect from. The figure in
+force for a period is the newest line at or before it, so setting rent once
+carries it forward and changing it in August leaves July judged against what was
+actually in force at the time. Clearing a category leaves a null line, which is
+a decision ("stop budgeting this") rather than an absence.
+
+Nothing has to be filled in by hand to start: each box is pre-loaded with what
+that category has actually cost per period over the last six, rounded to the
+nearest ten, and one button fills every blank with it.
+
+While a period is still running, each category is measured against what it has
+historically spent by this day rather than against a straight-line pro-rate of
+the limit. Rent lands on day one, so a linear budget line would call every fixed
+cost a blowout for the first half of the month. Categories with no limit set are
+listed separately rather than left out, since a budget covering most of the
+spending and none of the surprises is the usual way one turns out to be wrong.
+
+See [docs/schema.md](docs/schema.md) for why the table is versioned rather than
+written per period.
 
 ## The daily sync
 

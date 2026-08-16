@@ -273,6 +273,15 @@ select {
 
 /* --------------------------------------------------------- period picker -- */
 
+/* A flex item will not shrink below the width of its content unless told to,
+   so without this the thirteen chips inside set a floor on the width of every
+   page that carries a picker, and a phone zooms out to fit it. min-width: 0 is
+   what lets the overflow-x below actually do its job. */
+.period-picker {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .periods {
   display: flex;
   align-items: center;
@@ -736,6 +745,12 @@ tbody tr:hover td {
   white-space: nowrap;
 }
 
+/* A tag is short and fixed; letting it shrink turns "not spending" into
+   "not spendi…", which is worse than truncating the name it qualifies. */
+.cat-name .tag {
+  flex: 0 0 auto;
+}
+
 .cat-track {
   position: relative;
   height: 20px;
@@ -1027,6 +1042,197 @@ tbody tr:hover td {
   }
 
   .cat-track {
+    display: none;
+  }
+}
+
+/* --------------------------------------------------------------- budget -- */
+
+.budget-summary {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+  align-items: start;
+}
+
+/* Stacks earlier than the sieve does. The bars carry four columns of their own,
+   so anything narrower than this squeezes the track itself down to a stub and
+   the one thing the row exists to show stops being legible. */
+@media (max-width: 1320px) {
+  .budget-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Stacked, the headline would sit under eighteen rows of detail. It is the
+     answer; it goes first. */
+  .budget-summary > :last-child {
+    order: -1;
+  }
+}
+
+.budget-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 224px) minmax(0, 1fr) 112px 112px;
+  gap: 14px;
+  align-items: center;
+  padding: 7px 0;
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+}
+
+.budget-row:last-child {
+  border-bottom: 0;
+}
+
+.budget-row:hover .cat-name {
+  color: var(--living);
+}
+
+.budget-figures {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  text-align: right;
+}
+
+.budget-figures .num {
+  font-weight: 500;
+}
+
+.budget-figures small {
+  font-size: 11px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono), monospace;
+}
+
+.budget-verdict {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Over budget is the one state the headline must not read as reassuring. */
+.headline-over {
+  background: var(--alert-soft);
+}
+
+.headline-over .headline-value {
+  color: var(--alert);
+}
+
+/* The bar measures the period, not the money, but a green one on a crimson
+   panel reads as reassurance where none is intended. */
+.headline-over .progress {
+  background: color-mix(in srgb, var(--alert) 22%, transparent);
+}
+
+.headline-over .progress-fill {
+  background: var(--alert);
+}
+
+/* editor */
+
+.budget-edit-grid {
+  display: grid;
+  gap: 2px 24px;
+  /* min() rather than a bare 360px: on a phone the track would otherwise be
+     wider than the screen and the whole page would zoom out to fit it. */
+  grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
+}
+
+.budget-edit-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 118px;
+  grid-template-areas: 'name field' 'hint field';
+  gap: 0 12px;
+  align-items: center;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Wraps rather than truncates: a category name is the whole subject of the row,
+   and "Investing & round-…" is not something to make someone guess at. */
+.budget-edit-name {
+  grid-area: name;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 7px;
+  font-weight: 500;
+  min-width: 0;
+}
+
+.budget-edit-hint {
+  grid-area: hint;
+  font-size: 11px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono), monospace;
+}
+
+.budget-edit-field {
+  grid-area: field;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--ink-faint);
+}
+
+.budget-edit-field:focus-within {
+  border-color: var(--line-strong);
+}
+
+.budget-edit-field input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  text-align: right;
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+/* unbudgeted */
+
+.budget-loose {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0 24px;
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+}
+
+.budget-loose li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.budget-loose a {
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.budget-loose a:hover {
+  color: var(--living);
+}
+
+@media (max-width: 760px) {
+  .budget-row {
+    grid-template-columns: minmax(0, 1fr) 110px;
+  }
+
+  /* The track is already hidden at this width; the verdict tag is the next
+     thing to go, because the figures carry the same answer in less room. */
+  .budget-verdict {
     display: none;
   }
 }
