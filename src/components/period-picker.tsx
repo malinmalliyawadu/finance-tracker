@@ -23,7 +23,7 @@ export function PeriodPicker({
   const active = periods.find((p) => p.start === selected)
 
   return (
-    <div>
+    <div className="period-picker">
       <div className="eyebrow" style={{ marginBottom: 6, textAlign: 'right' }}>
         {active ? periodLabel(active.start, active.end) : 'All periods'}
       </div>

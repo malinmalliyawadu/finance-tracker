@@ -9,6 +9,7 @@ import { moneyWhole } from '../lib/format.ts'
 const LINKS = [
   { href: '/', label: 'Dashboard' },
   { href: '/categories', label: 'Categories' },
+  { href: '/budget', label: 'Budget' },
   { href: '/recurring', label: 'Recurring' },
   { href: '/transactions', label: 'Transactions' },
   { href: '/large', label: 'Large purchases' },
