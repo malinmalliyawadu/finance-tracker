@@ -1,7 +1,7 @@
-import { CategoryBars } from '../../components/category-bars.tsx'
-import { PeriodPicker } from '../../components/period-picker.tsx'
-import { getCategoryTotals, getPeriods } from '../../lib/queries.ts'
-import { money, plural } from '../../lib/format.ts'
+import { CategoryBars } from '../../../components/category-bars.tsx'
+import { PeriodPicker } from '../../../components/period-picker.tsx'
+import { getCategoryTotals, getPeriods } from '../../../lib/queries.ts'
+import { money, plural } from '../../../lib/format.ts'
 
 export const dynamic = 'force-dynamic'
 

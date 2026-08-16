@@ -1,7 +1,11 @@
-import { CsvUpload } from '../../components/csv-upload.tsx'
-import { getAccounts, getRecentSyncs, getSettings } from '../../lib/queries.ts'
-import { fullDate, money, plural } from '../../lib/format.ts'
-import { setStatementStartDay } from '../actions.ts'
+import { AddPasskey } from '../../../components/add-passkey.tsx'
+import { CsvUpload } from '../../../components/csv-upload.tsx'
+import { listPasskeys } from '../../../lib/auth/passkeys.ts'
+import { authEnabled } from '../../../lib/auth/session.ts'
+import { getAccounts, getRecentSyncs, getSettings } from '../../../lib/queries.ts'
+import { fullDate, money, plural } from '../../../lib/format.ts'
+import { forgetPasskey } from '../../auth-actions.ts'
+import { setStatementStartDay } from '../../actions.ts'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,10 +15,13 @@ const ordinal = (n: number) => {
 }
 
 export default async function AccountsPage() {
-  const [accounts, syncs, settings] = await Promise.all([
+  const signInOn = authEnabled()
+
+  const [accounts, syncs, settings, passkeys] = await Promise.all([
     getAccounts(),
     getRecentSyncs(6),
     getSettings(),
+    signInOn ? listPasskeys() : [],
   ])
 
   const startDay = settings.statementStartDay
@@ -68,6 +75,68 @@ export default async function AccountsPage() {
             gaps.
           </span>
         </form>
+      </section>
+
+      <section className="card">
+        <div className="card-head">
+          <div>
+            <h2>Signing in</h2>
+            <p>
+              The password in <code>APP_PASSWORD</code> is the root of trust and always works. A
+              passkey is a faster way to present the same fact, and can only be added by someone
+              already signed in — so every one of these descends from someone who knew the
+              password. Changing the password signs every device out; it does not remove these.
+            </p>
+          </div>
+        </div>
+
+        {!signInOn ? (
+          <div className="empty">
+            <strong>Sign-in is off</strong>
+            <code>APP_PASSWORD</code> is unset, so every page is open to anyone who can reach this
+            URL. There is nothing for a passkey to unlock until it is set.
+          </div>
+        ) : (
+          <>
+            {passkeys.length === 0 ? (
+              <p className="note">
+                No passkeys yet. Adding one means the password is something you keep rather than
+                something you type.
+              </p>
+            ) : (
+              passkeys.map((passkey) => (
+                <div key={passkey.credentialId} className="account-row">
+                  <div className="account-name">
+                    <strong>{passkey.label}</strong>
+                    <small>
+                      {passkey.deviceType === 'multiDevice'
+                        ? passkey.backedUp
+                          ? 'synced to a keychain'
+                          : 'syncable, not backed up'
+                        : 'this device only'}
+                    </small>
+                  </div>
+                  <div className="account-facts">
+                    <span>added {fullDate(passkey.createdAt)}</span>
+                    <span>
+                      {passkey.lastUsedAt ? `last used ${fullDate(passkey.lastUsedAt)}` : 'never used'}
+                    </span>
+                  </div>
+                  <form action={forgetPasskey}>
+                    <input type="hidden" name="credentialId" value={passkey.credentialId} />
+                    <button type="submit" className="btn btn-quiet">
+                      Forget
+                    </button>
+                  </form>
+                </div>
+              ))
+            )}
+
+            <div style={{ marginTop: 16 }}>
+              <AddPasskey />
+            </div>
+          </>
+        )}
       </section>
 
       <section className="card">

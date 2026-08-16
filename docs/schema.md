@@ -99,7 +99,18 @@ erDiagram
         int    uncategorised_count
         jsonb  details
     }
+    passkeys {
+        text   credential_id PK "as the authenticator issued it, base64url"
+        bytea  public_key "verification only; signs nothing"
+        bigint counter "clone check, written back after each assertion"
+        text   label "typed by a human, not sniffed from the user agent"
+        text   device_type
+        bool   backed_up
+    }
 ```
+
+`passkeys` joins to nothing on purpose — there is no users table. See
+[below](#passkeys-hangs-off-nothing-because-there-is-nobody-to-hang-it-off).
 
 ## Why it is split this way
 
@@ -296,6 +307,33 @@ of a typical period's spend that has landed by this day — falling back to
 straight-line only where there is no history to shape it with. It is the same
 argument as the pace comparison on the dashboard, applied per category.
 
+### `passkeys` hangs off nothing, because there is nobody to hang it off
+
+There is no users table and there is not going to be one. This is a single
+household with one shared password; a `users` row would invent an identity the
+app cannot check and cannot use, and every query would then carry a join whose
+answer is always the same.
+
+So a row in `passkeys` is a **device**, not a person. The primary key is the
+credential id the authenticator generated, because that is what an assertion
+names and it is unique by construction — no surrogate key adds anything.
+
+The table stores public keys only. Its whole contents leaking would let someone
+verify a signature and nothing else. What is worth protecting is the ability to
+*add* a row, which is why registration requires an existing session: the
+password is the root of trust and every credential here descends from someone
+who knew it.
+
+`counter` is persisted after each accepted assertion rather than left at its
+initial value. Authenticators that keep a counter increment it every time; one
+that goes backwards means two things are answering for one credential. Written
+back, that is a clone check. Not written back, every assertion is compared
+against zero and the column is decoration.
+
+`label` is required and typed by a human. Deriving it from the user agent
+produces three rows called "Chrome on macOS" sitting on one desk, and the only
+moment the name matters is a year later, choosing which row to delete.
+
 ### `sync_runs`
 
 A daily sync that silently stops returning transactions looks exactly like a
@@ -322,8 +360,8 @@ is no longer "which rows may a client see" — the browser never sees any — bu
 | Role            | Reads      | Writes                                                   |
 | --------------- | ---------- | -------------------------------------------------------- |
 | `finance_owner` | everything | everything. Migrations only.                             |
-| `finance_web`   | everything | `overrides`, `rules`, `merchant_aliases`, `categories`, `budget_lines`, `settings` |
-| `finance_sync`  | everything | `accounts`, `transactions_raw`, `transactions_enriched`, `sync_runs` |
+| `finance_web`   | everything | `overrides`, `rules`, `merchant_aliases`, `categories`, `budget_lines`, `settings`, `passkeys` |
+| `finance_sync`  | everything except `passkeys` | `accounts`, `transactions_raw`, `transactions_enriched`, `sync_runs` |
 
 The split is what makes the read-time override design safe: `finance_web` has no
 write access to the derived layer at all, so the UI's only way to recategorise a
@@ -334,10 +372,17 @@ cannot touch rules or overrides.
 Both views are `security_invoker`, so they cannot become a hole around the
 privileges on the tables underneath them.
 
+`passkeys` is the one table that breaks the "everyone reads everything" rule.
+`0004` sets default privileges so a new table is never invisible to the app,
+which is the right default and the wrong answer here: the sync job fetches
+transactions and has no business reading credentials, however inert a public key
+is. `0008` revokes it explicitly rather than relying on the default not to
+apply.
+
 Roles are created `NOLOGIN` with no password, so nothing secret is committed.
 Grant them login separately and point `DATABASE_URL_WEB` and `DATABASE_URL_SYNC`
 at them; both fall back to `DATABASE_URL`, which is what local development uses.
 
-Still outstanding: the app itself has no authentication. Behind Coolify on a
-private host that may be acceptable, but it should be a conscious decision
-rather than an oversight.
+Sign-in is a separate boundary from all of this and sits in front of it: see
+**Signing in** in the README. `APP_PASSWORD` gates every route, and the database
+roles decide what a request that got through may write.

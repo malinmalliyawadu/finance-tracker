@@ -1,8 +1,8 @@
-import { PeriodPicker } from '../../components/period-picker.tsx'
-import { TransactionsTable } from '../../components/transactions-table.tsx'
-import { getCategories, getLargePurchases, getPeriods, getSettings } from '../../lib/queries.ts'
-import { money, moneyWhole, plural } from '../../lib/format.ts'
-import { setThreshold } from '../actions.ts'
+import { PeriodPicker } from '../../../components/period-picker.tsx'
+import { TransactionsTable } from '../../../components/transactions-table.tsx'
+import { getCategories, getLargePurchases, getPeriods, getSettings } from '../../../lib/queries.ts'
+import { money, moneyWhole, plural } from '../../../lib/format.ts'
+import { setThreshold } from '../../actions.ts'
 
 export const dynamic = 'force-dynamic'
 
