@@ -1,0 +1,531 @@
+{
+  "version": 1,
+  "note": "Categorisation rules derived from 1,256 real transactions, Aug 2025 - Aug 2026. Patterns are case-insensitive regex matched against the raw transaction description. Rules are ordered: first match wins.",
+  "passthrough_in": [
+    "^salary\\s+cxc global"
+  ],
+  "passthrough_out": [
+    "^pay m malliya wadu$"
+  ],
+  "exclusions": [
+    "payment received",
+    "payment - thank you",
+    "payment returned by bank",
+    "direct debit payment received",
+    "amex payment",
+    "american express",
+    "flight centre mastercard",
+    "transfer (to|from) m s malliyawadu - 0(1|2|7)\\b",
+    "^ap#22093831\\s+(to|from)\\s+m s malliyawadu",
+    "^ap#(12594087|22647266|23258687)\\s+(to|from)\\s+m s malliyawadu",
+    "^ap#\\d+\\s+from\\s+m s malliyawadu",
+    "payment thankyou",
+    "^pay malin malliya wadu",
+    "^dd dishonour",
+    "^ap dishonour",
+    "^for \\$"
+  ],
+  "unidentified": [
+    "^trf \\*+ ?\\d*",
+    "^trf \\d"
+  ],
+  "categories": [
+    {
+      "priority": 1,
+      "category": "Loan repayments",
+      "patterns": [
+        "loan pmt",
+        "loan repymt"
+      ]
+    },
+    {
+      "priority": 2,
+      "category": "Investing & round-ups",
+      "patterns": [
+        "sharesies",
+        "feijoa"
+      ]
+    },
+    {
+      "priority": 3,
+      "category": "Rates, water & power",
+      "patterns": [
+        "meridian energy",
+        "wellington city counci",
+        "wgtn city council",
+        "tiaki wai",
+        "wellington city council"
+      ]
+    },
+    {
+      "priority": 4,
+      "category": "Body corp & insurance",
+      "patterns": [
+        "body corporate",
+        "covi insurance",
+        "lux solar"
+      ]
+    },
+    {
+      "priority": 5,
+      "category": "Family & personal transfers",
+      "patterns": [
+        "sarath malliyawadu",
+        "chang park",
+        "p w joshi",
+        "mary anne gates",
+        "xueying liu",
+        "^wise ",
+        "wise auk"
+      ]
+    },
+    {
+      "priority": 6,
+      "category": "Internet & mobile",
+      "patterns": [
+        "skinny fixed",
+        "spark prepaid",
+        "wireless nation",
+        "airalo"
+      ]
+    },
+    {
+      "priority": 7,
+      "category": "Cash withdrawals",
+      "patterns": [
+        "atms - nz"
+      ]
+    },
+    {
+      "priority": 8,
+      "category": "Health & pharmacy",
+      "patterns": [
+        "chemis",
+        "pharmac",
+        "wellworks",
+        "med\\*thorndon",
+        "unichem",
+        "wellington medical"
+      ]
+    },
+    {
+      "priority": 9,
+      "category": "Groceries",
+      "patterns": [
+        "new wor",
+        "newworld",
+        "woolworths",
+        "pak ?n ?save",
+        "paknsave",
+        "four ?square",
+        "foursquare",
+        "moore wilsons",
+        "zodiac wholef",
+        "commonsense",
+        "goodfor",
+        "queens supermarket",
+        "t2 wellington",
+        "myhomefood"
+      ]
+    },
+    {
+      "priority": 10,
+      "category": "Eating out & takeaways",
+      "patterns": [
+        "kfc",
+        "k\\.f\\.c",
+        "mcdonald",
+        "burger ?king",
+        "burgerfuel",
+        "burger fuel",
+        "nando",
+        "pizza club",
+        "pizza jacks",
+        "domino",
+        "subway",
+        "great india",
+        "popeye",
+        "little penang",
+        "spizzico",
+        "dollar japa",
+        "the hangar",
+        "the spicery",
+        "puku ?pies",
+        "pukupies",
+        "brezelmania",
+        "alswaida",
+        "yor yak",
+        "gelato",
+        "cozy cake",
+        "nyonya",
+        "smile elephan",
+        "zephyr cafe",
+        "easyeats",
+        "uber\\s*\\*?\\s*eats",
+        "khao soi",
+        "kokos kitchen",
+        "dough upper hutt",
+        "re ?burger",
+        "freds sandwic",
+        "macha",
+        "pita pit",
+        "sketchbook coffee",
+        "columbus coffee",
+        "colombus cafe",
+        "upper hutt espresso",
+        "fergbaker",
+        "fergburger",
+        "pandan asian",
+        "pirates of the gril",
+        "scopa",
+        "lucky wellington",
+        "toko bintang",
+        "namaste bharat",
+        "apna chaat",
+        "master of india",
+        "elite turkish",
+        "peach's hot chicken",
+        "island gelato",
+        "panda express",
+        "chick-fil-a",
+        "anattas thai",
+        "viva mexico",
+        "bambina",
+        "french kiss",
+        "micky day",
+        "toastie lords",
+        "small acorns",
+        "sederhana",
+        "top noodle",
+        "kali opak",
+        "van bloemen",
+        "starbucks",
+        "hj's|hjs ",
+        "boneface",
+        "j ?j murphy",
+        "wellesley boutique",
+        "something & so",
+        "bunningssausagesizzle",
+        "wanaka lavend",
+        "rippon vineyard",
+        "rosella wine",
+        "nood nood",
+        "cicio cacio",
+        "bikaner",
+        "panhead",
+        "golden girl",
+        "hot like a me",
+        "one bowl and",
+        "wedg ave",
+        "thai orchid",
+        "mojo airport",
+        "silverstream bakery",
+        "suk jai thai",
+        "gamma rays",
+        "soru bakery",
+        "antalya kebab",
+        "sambal bali",
+        "the oaks sata",
+        "best ugly bag",
+        "corso wellington",
+        "alaturka",
+        "punjabi cafe",
+        "xantos",
+        "the greek foo",
+        "meals on whee",
+        "shree baba",
+        "no knead to b",
+        "picnix bakery",
+        "^cafe \\d",
+        "cafe\\s+\\d+\\s+otaki",
+        "rosebowl home",
+        "montfoort",
+        "belen vegan",
+        "go food lolli",
+        "cheap welli",
+        "aye! empanada",
+        "the bach cafe",
+        "haere mai",
+        "revolution to prague",
+        "slice-",
+        "^slice",
+        "wellington nz"
+      ]
+    },
+    {
+      "priority": 11,
+      "category": "Fitness & sport",
+      "patterns": [
+        "snapnation",
+        "city ?fitness",
+        "ezi\\*health",
+        "yoga for the people",
+        "fitbod",
+        "ironman",
+        "outside sports",
+        "stirling sports",
+        "rebel ",
+        "daytona adventure"
+      ]
+    },
+    {
+      "priority": 12,
+      "category": "Subscriptions & software",
+      "patterns": [
+        "apple\\.com",
+        "google ?\\*?play",
+        "youtube",
+        "netflix",
+        "neon auckland",
+        "notion",
+        "supabase",
+        "vercel",
+        "cloudflare",
+        "anthropic",
+        "claude",
+        "cursor",
+        "openai",
+        "openrouter",
+        "posthog",
+        "resend",
+        "dreamscape",
+        "vultr",
+        "warnermedia",
+        "google\\*cloud",
+        "nzmca"
+      ]
+    },
+    {
+      "priority": 13,
+      "category": "Travel & accommodation",
+      "patterns": [
+        "agoda",
+        "airbnb",
+        "booking\\.com",
+        "hotel",
+        "air new zealand",
+        "jetstar",
+        "hawaiian airlines",
+        "super\\.com",
+        "super\\+",
+        "outrigger",
+        "samabe",
+        "hilton",
+        "mustika",
+        "havelock north holiday",
+        "vipcars",
+        "w\\.m\\.s ho",
+        "joy next laundromat",
+        "tmc pty",
+        "airwalaus",
+        "intercontinen",
+        "getyourguide",
+        "rydges"
+      ]
+    },
+    {
+      "priority": 14,
+      "category": "Transport & fuel",
+      "patterns": [
+        "uber\\s*\\*?\\s*trip",
+        "snapper",
+        "grab\\*",
+        "bp connect",
+        "bp 2go",
+        "mobil ",
+        "gull ",
+        "waitomo",
+        "npd ",
+        "apl fuel",
+        "kiwi fuels",
+        "fuelstop",
+        "fuel stop",
+        "new world fuel",
+        "pak n save fuel",
+        "nz transport agency",
+        "paymypark",
+        "carpark",
+        "car park",
+        "tory street",
+        "at public transport",
+        "transportfornsw",
+        "flamingo scooters",
+        "manunui"
+      ]
+    },
+    {
+      "priority": 15,
+      "category": "Clothing & grooming",
+      "patterns": [
+        "i love ugly",
+        "country road",
+        "lululemon",
+        "uniqlo",
+        "zara",
+        "platypus",
+        "hallenstein",
+        "mecca",
+        "perfume nz",
+        "barber",
+        "french ba",
+        "ali barbers",
+        "d'beauty",
+        "hmns",
+        "kathmandu",
+        "smith & caughey",
+        "patagonia"
+      ]
+    },
+    {
+      "priority": 16,
+      "category": "Home & shopping",
+      "patterns": [
+        "bunnings",
+        "mighty ?ape",
+        "jb ?hi",
+        "noel leeming",
+        "briscoes",
+        "the warehouse",
+        "thewarehouse",
+        "flower hut",
+        "victorianaflorist",
+        "ikea",
+        "temu",
+        "ecoflow",
+        "heathcote appliances",
+        "whitcoulls",
+        "harvey norman",
+        "pb technolog",
+        "kuxiu",
+        "iro stationery",
+        "instant pot",
+        "ooni",
+        "arataki honey",
+        "supercheap auto",
+        "mecca"
+      ]
+    },
+    {
+      "priority": 17,
+      "category": "Entertainment & events",
+      "patterns": [
+        "event queensgate",
+        "event george",
+        "moshtix",
+        "cinema",
+        "wellington zoo",
+        "national army",
+        "eastwoodhill",
+        "liquid events"
+      ]
+    },
+    {
+      "priority": 18,
+      "category": "Donations & giving",
+      "patterns": [
+        "nzredcross",
+        "amnesty",
+        "cancer society",
+        "everybody  ?eats",
+        "red cross"
+      ]
+    },
+    {
+      "priority": 19,
+      "category": "Mortgage interest",
+      "patterns": [
+        "^loan interest"
+      ]
+    },
+    {
+      "priority": 20,
+      "category": "Fees & interest",
+      "patterns": [
+        "interest",
+        "annual card fee",
+        "account fee",
+        "international txn fee",
+        "dishonour"
+      ]
+    },
+    {
+      "priority": 21,
+      "category": "Gifts",
+      "patterns": [
+        "happywedding",
+        "jojo&leo",
+        "cullen jewellery"
+      ]
+    }
+  ],
+  "income": [
+    {
+      "priority": 1,
+      "category": "Contracting income (via Hnry)",
+      "patterns": [
+        "hnry",
+        "potentia lim",
+        "cxc global n"
+      ]
+    },
+    {
+      "priority": 2,
+      "category": "Car park rent received",
+      "patterns": [
+        "car park"
+      ]
+    },
+    {
+      "priority": 3,
+      "category": "Tax & GST refunds",
+      "patterns": [
+        "i\\.r\\.d",
+        "gst refund"
+      ]
+    },
+    {
+      "priority": 4,
+      "category": "Sharesies withdrawal",
+      "patterns": [
+        "sharesies"
+      ]
+    },
+    {
+      "priority": 5,
+      "category": "Reimbursements",
+      "patterns": [
+        "^bill payment"
+      ]
+    }
+  ],
+  "merchant_aliases": [
+    {
+      "pattern": "ezi\\*health|yoga for the people",
+      "display_name": "Bikram / Yoga for the People"
+    },
+    {
+      "pattern": "snapnation",
+      "display_name": "Snap Gym"
+    },
+    {
+      "pattern": "city ?fitness",
+      "display_name": "City Fitness"
+    },
+    {
+      "pattern": "wellington city counci|wgtn city council",
+      "display_name": "Wellington City Council"
+    },
+    {
+      "pattern": "claude\\.ai|anthropic",
+      "display_name": "Claude / Anthropic"
+    }
+  ],
+  "non_consumption_categories": [
+    "Loan repayments",
+    "Investing & round-ups",
+    "Family & personal transfers"
+  ],
+  "payg_merchants": [
+    "Bikram / Yoga for the People"
+  ]
+}
