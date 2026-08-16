@@ -87,9 +87,35 @@ function pool(): postgres.Sql {
  * the real pool on first access. The proxy exists purely to keep that lazy
  * behaviour invisible at the ~30 call sites.
  */
-export const db: postgres.Sql = new Proxy(function noop() {} as unknown as postgres.Sql, {
-  apply: (_target, _thisArg, args: unknown[]) =>
-    (pool() as unknown as (...a: unknown[]) => unknown)(...args),
-  get: (_target, property) => Reflect.get(pool(), property),
-  has: (_target, property) => Reflect.has(pool(), property),
-})
+export const db: postgres.Sql = lazy(() => pool())
+
+/**
+ * The sync connection, for the one thing the app does that writes the ledger:
+ * importing a statement CSV from the Accounts page.
+ *
+ * Kept separate from `db` on purpose. Page rendering goes through a role that
+ * cannot write transactions_raw at all, so a mistake in a query that renders a
+ * table still cannot touch the ledger. Ingesting is a different job and says so.
+ */
+const globalForSync = globalThis as unknown as { financeSyncDb?: postgres.Sql }
+
+function syncPool(): postgres.Sql {
+  if (!globalForSync.financeSyncDb) globalForSync.financeSyncDb = create('sync')
+  return globalForSync.financeSyncDb
+}
+
+export const syncDb: postgres.Sql = lazy(() => syncPool())
+
+/**
+ * Wraps a postgres.js instance so it behaves normally — `db\`select …\`` — while
+ * resolving the real pool on first access. The proxy exists purely to keep that
+ * lazy behaviour invisible at the call sites.
+ */
+function lazy(resolve: () => postgres.Sql): postgres.Sql {
+  return new Proxy(function noop() {} as unknown as postgres.Sql, {
+    apply: (_target, _thisArg, args: unknown[]) =>
+      (resolve() as unknown as (...a: unknown[]) => unknown)(...args),
+    get: (_target, property) => Reflect.get(resolve(), property),
+    has: (_target, property) => Reflect.has(resolve(), property),
+  })
+}

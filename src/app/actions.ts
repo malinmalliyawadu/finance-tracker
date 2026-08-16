@@ -2,7 +2,9 @@
 
 import { revalidatePath } from 'next/cache'
 
-import { db } from '../lib/db.ts'
+import { db, syncDb } from '../lib/db.ts'
+import { importGemStatement } from '../lib/import-gem.ts'
+import { recompute } from '../lib/recompute.ts'
 import type { ExclusionReason } from '../lib/rules-file.ts'
 
 const EXCLUSION_REASONS: ExclusionReason[] = [
@@ -55,6 +57,72 @@ export async function recategorise(formData: FormData): Promise<void> {
   }
 
   revalidatePath('/', 'layout')
+}
+
+export type ImportState =
+  | { status: 'idle' }
+  | { status: 'error'; message: string }
+  | {
+      status: 'done'
+      filename: string
+      rowsInFile: number
+      inserted: number
+      alreadyPresent: number
+      from: string
+      to: string
+      coverage: number
+      unmatched: number
+    }
+
+/**
+ * Imports an uploaded Latitude/Gem statement.
+ *
+ * Safe to run on the whole file every time: rows are keyed on a hash of the
+ * original CSV line, so overlapping exports insert nothing. That matters
+ * because the statement cannot be asked for "everything since last time" —
+ * every export overlaps the previous one.
+ */
+export async function importStatement(
+  _previous: ImportState,
+  formData: FormData,
+): Promise<ImportState> {
+  const file = formData.get('file')
+
+  if (!(file instanceof File) || file.size === 0) {
+    return { status: 'error', message: 'Choose a CSV file to import.' }
+  }
+  if (file.size > 8_000_000) {
+    return { status: 'error', message: 'That file is over 8MB, which is far larger than a statement export. Check it is the right file.' }
+  }
+
+  try {
+    const text = await file.text()
+    // Writes the ledger, so it uses the sync connection rather than the
+    // read-mostly one the pages render through.
+    const result = await importGemStatement(syncDb, { text, filename: file.name })
+
+    // Imported rows arrive unclassified, and an unclassified transaction is
+    // missing from every total on the dashboard.
+    const classified = await recompute(syncDb)
+
+    revalidatePath('/', 'layout')
+
+    return {
+      status: 'done',
+      filename: file.name,
+      rowsInFile: result.rowsInFile,
+      inserted: result.inserted,
+      alreadyPresent: result.alreadyPresent,
+      from: result.from,
+      to: result.to,
+      coverage: classified.coverage,
+      unmatched: classified.unmatched,
+    }
+  } catch (error) {
+    // Parse errors name the line, which is the only useful thing to say about a
+    // file in the wrong format.
+    return { status: 'error', message: error instanceof Error ? error.message : String(error) }
+  }
 }
 
 /** The large-purchase threshold. What counts as a decision rather than a habit. */

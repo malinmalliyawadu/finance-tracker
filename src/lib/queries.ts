@@ -23,18 +23,106 @@ export async function getSettings(): Promise<Settings> {
   }
 }
 
-export type Period = { start: string; end: string; isCurrent: boolean }
+export type Period = {
+  start: string
+  end: string
+  /** The period containing today. Exists whether or not anything has happened in it yet. */
+  isCurrent: boolean
+  isComplete: boolean
+  /** Days into the period, 1-based. Equals totalDays once the period has closed. */
+  elapsedDays: number
+  totalDays: number
+  hasData: boolean
+}
 
-/** Every period that has transactions, newest first. */
+/**
+ * Every period, newest first, including the one we are living in.
+ *
+ * The current period is included even when it holds nothing yet. Deriving the
+ * list purely from transactions means that on the 16th — the first day of a new
+ * statement period — the newest period on offer is the one that just closed,
+ * and the dashboard quietly answers a question about last month.
+ */
 export async function getPeriods(): Promise<Period[]> {
-  const rows = await db<{ period_start: Date; period_end: Date }[]>`
-    select distinct period_start, period_end from transactions order by period_start desc
+  const rows = await db<
+    {
+      period_start: Date
+      period_end: Date
+      is_current: boolean
+      elapsed_days: number
+      total_days: number
+      has_data: boolean
+    }[]
+  >`
+    with settings_row as (select statement_start_day from settings limit 1),
+    current_period as (
+      select statement_period_start(current_date, statement_start_day) as period_start
+      from settings_row
+    ),
+    all_periods as (
+      select distinct period_start from transactions
+      union
+      select period_start from current_period
+    )
+    select
+      p.period_start,
+      statement_period_end(p.period_start)                            as period_end,
+      (p.period_start = (select period_start from current_period))    as is_current,
+      (current_date - p.period_start + 1)                             as elapsed_days,
+      (statement_period_end(p.period_start) - p.period_start + 1)     as total_days,
+      exists (select 1 from transactions t where t.period_start = p.period_start) as has_data
+    from all_periods p
+    order by p.period_start desc
   `
-  return rows.map((row, i) => ({
-    start: row.period_start.toISOString().slice(0, 10),
-    end: row.period_end.toISOString().slice(0, 10),
-    isCurrent: i === 0,
-  }))
+
+  return rows.map((row) => {
+    const totalDays = Number(row.total_days)
+    return {
+      start: row.period_start.toISOString().slice(0, 10),
+      end: row.period_end.toISOString().slice(0, 10),
+      isCurrent: row.is_current,
+      isComplete: !row.is_current && Number(row.elapsed_days) > totalDays,
+      elapsedDays: Math.min(Math.max(Number(row.elapsed_days), 0), totalDays),
+      totalDays,
+      hasData: row.has_data,
+    }
+  })
+}
+
+/**
+ * What spending looked like by this same day of the period, averaged over the
+ * periods before it.
+ *
+ * Comparing a part-finished period against whole-period averages is the trap
+ * this whole app exists to avoid: on day three it would report spending down
+ * 90% and mean nothing. Pro-rating the average linearly is no better, because
+ * rent, rates and subscriptions cluster rather than spreading evenly. The only
+ * honest comparison is like-for-like against the same point in prior periods.
+ */
+export async function getPaceComparison(
+  periodStart: string,
+  elapsedDays: number,
+): Promise<{ average: number; periods: number }> {
+  const [row] = await db<{ average: string; periods: number }[]>`
+    with prior as (
+      select distinct period_start from transactions
+      where period_start < ${periodStart}
+      order by period_start desc
+      limit 12
+    ),
+    by_day as (
+      select p.period_start,
+             coalesce(sum(-t.amount) filter (where t.counts_as_spend), 0) as spend
+      from prior p
+      left join transactions t
+        on t.period_start = p.period_start
+       and t.date <= p.period_start + ${Math.max(elapsedDays - 1, 0)}::integer
+      group by p.period_start
+    )
+    select coalesce(avg(spend), 0) as average, count(*)::int as periods from by_day
+  `
+
+  return { average: num(row?.average), periods: Number(row?.periods ?? 0) }
 }
 
 // ---------------------------------------------------------------------------
@@ -428,6 +516,89 @@ export type StaleAccount = {
   source: 'akahu' | 'csv'
   daysSinceTransaction: number | null
   daysSinceSync: number | null
+}
+
+export type AccountRow = {
+  id: string
+  name: string
+  institution: string | null
+  source: 'akahu' | 'csv'
+  balance: number | null
+  oldestTransaction: string | null
+  latestTransaction: string | null
+  daysSinceTransaction: number | null
+  daysSinceSync: number | null
+  transactionCount: number
+  staleAfterDays: number
+  isStale: boolean
+}
+
+export async function getAccounts(): Promise<AccountRow[]> {
+  const rows = await db<
+    {
+      id: string
+      name: string
+      institution: string | null
+      source: 'akahu' | 'csv'
+      current_balance: string | null
+      oldest_transaction_date: Date | null
+      latest_transaction: Date | null
+      days_since_transaction: number | null
+      days_since_sync: number | null
+      transaction_count: string
+      stale_after_days: number
+      is_stale: boolean
+    }[]
+  >`select * from account_health order by source, institution nulls last, name`
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    institution: row.institution,
+    source: row.source,
+    balance: row.current_balance === null ? null : num(row.current_balance),
+    oldestTransaction: row.oldest_transaction_date?.toISOString().slice(0, 10) ?? null,
+    latestTransaction: row.latest_transaction?.toISOString().slice(0, 10) ?? null,
+    daysSinceTransaction: row.days_since_transaction,
+    daysSinceSync: row.days_since_sync,
+    transactionCount: Number(row.transaction_count),
+    staleAfterDays: row.stale_after_days,
+    isStale: row.is_stale,
+  }))
+}
+
+export type SyncRun = {
+  trigger: string
+  status: string
+  startedAt: string
+  transactionsNew: number
+  uncategorised: number | null
+  error: string | null
+}
+
+export async function getRecentSyncs(limit = 5): Promise<SyncRun[]> {
+  const rows = await db<
+    {
+      trigger: string
+      status: string
+      started_at: Date
+      transactions_new: number
+      uncategorised_count: number | null
+      error: string | null
+    }[]
+  >`
+    select trigger, status, started_at, transactions_new, uncategorised_count, error
+    from sync_runs order by started_at desc limit ${limit}
+  `
+
+  return rows.map((row) => ({
+    trigger: row.trigger,
+    status: row.status,
+    startedAt: row.started_at.toISOString(),
+    transactionsNew: row.transactions_new,
+    uncategorised: row.uncategorised_count,
+    error: row.error,
+  }))
 }
 
 export type Health = {

@@ -19,11 +19,37 @@ function fillFor(band: SieveBand): string {
   return 'repeating-linear-gradient(135deg, var(--excluded) 0 1.5px, var(--excluded-soft) 1.5px 5px)'
 }
 
-export function Sieve({ data, averageLiving }: { data: SieveData; averageLiving: number }) {
-  const bands = data.bands.filter((band) => band.amount > 0.005)
+export type Comparison = {
+  average: number
+  /** Names what the average is of, since it differs for a part-finished period. */
+  label: string
+}
+
+export type Progress = { elapsedDays: number; totalDays: number }
+
+export function Sieve({
+  data,
+  comparison,
+  progress,
+}: {
+  data: SieveData
+  comparison: Comparison
+  /** Present only while the period is still running. */
+  progress?: Progress
+}) {
+  const bands = data.bands
+    .filter((band) => band.amount > 0.005)
+    // Past tense is wrong while the period is still running.
+    .map((band) =>
+      band.key === 'living' && progress
+        ? { ...band, because: 'What I have actually spent so far.' }
+        : band,
+    )
   const total = bands.reduce((sum, band) => sum + band.amount, 0)
+  const averageLiving = comparison.average
   const delta = averageLiving > 0 ? data.living / averageLiving - 1 : 0
   const over = delta > 0
+  const partial = progress !== undefined
 
   // Loan principal and investing are not living costs, but they still leave the
   // account. A "what's left" figure that ignores them would be flattering and
@@ -34,7 +60,9 @@ export function Sieve({ data, averageLiving }: { data: SieveData; averageLiving:
   return (
     <div className="sieve">
       <div>
-        <div className="eyebrow">{moneyWhole(total)} left my accounts this period</div>
+        <div className="eyebrow">
+          {moneyWhole(total)} left my accounts{partial ? ' so far this period' : ' this period'}
+        </div>
 
         <div className="sieve-bar" role="img" aria-label={describe(bands, total)}>
           {bands.map((band) => (
@@ -74,11 +102,28 @@ export function Sieve({ data, averageLiving }: { data: SieveData; averageLiving:
 
       <div>
         <div className="headline">
-          <div className="eyebrow">Living costs</div>
+          <div className="eyebrow">
+            {partial ? 'Living costs so far' : 'Living costs'}
+          </div>
           <div className="headline-value">{moneyWhole(data.living)}</div>
+
+          {progress && (
+            <div className="progress" aria-hidden>
+              <span
+                className="progress-fill"
+                style={{ width: `${(progress.elapsedDays / progress.totalDays) * 100}%` }}
+              />
+            </div>
+          )}
+          {progress && (
+            <div className="headline-note">
+              Day {progress.elapsedDays} of {progress.totalDays}
+            </div>
+          )}
+
           {averageLiving > 0 && (
             <div className={`headline-delta ${over ? 'delta-over' : 'delta-under'}`}>
-              {over ? '▲' : '▼'} {Math.abs(delta * 100).toFixed(0)}% vs 12-period average
+              {over ? '▲' : '▼'} {Math.abs(delta * 100).toFixed(0)}% {comparison.label}
               <span className="num" style={{ color: 'var(--ink-faint)', fontWeight: 400 }}>
                 {moneyWhole(averageLiving)}
               </span>

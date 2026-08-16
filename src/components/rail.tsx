@@ -12,6 +12,7 @@ const LINKS = [
   { href: '/recurring', label: 'Recurring' },
   { href: '/transactions', label: 'Transactions' },
   { href: '/large', label: 'Large purchases' },
+  { href: '/accounts', label: 'Accounts' },
 ]
 
 export function Rail({ health }: { health: Health | null }) {

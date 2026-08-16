@@ -4,8 +4,15 @@ import { CategoryBars } from '../components/category-bars.tsx'
 import { PeriodPicker } from '../components/period-picker.tsx'
 import { Sieve } from '../components/sieve.tsx'
 import { TrendChart } from '../components/trend-chart.tsx'
-import { getCategoryTotals, getHealth, getPeriods, getSieve, getTrend } from '../lib/queries.ts'
-import { moneyWhole } from '../lib/format.ts'
+import {
+  getCategoryTotals,
+  getHealth,
+  getPaceComparison,
+  getPeriods,
+  getSieve,
+  getTrend,
+} from '../lib/queries.ts'
+import { moneyWhole, periodLabel } from '../lib/format.ts'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,20 +40,35 @@ export default async function DashboardPage({
     )
   }
 
-  const selected = periods.find((p) => p.start === period)?.start ?? periods[0]!.start
+  // Defaults to the period we are living in, not the last one that closed.
+  const active = periods.find((p) => p.start === period) ?? periods[0]!
+  const selected = active.start
+  const partial = active.isCurrent && active.elapsedDays < active.totalDays
 
-  const [sieve, trend, categories, health] = await Promise.all([
+  const [sieve, trend, categories, health, pace] = await Promise.all([
     getSieve(selected),
     getTrend(13),
     getCategoryTotals(selected),
     getHealth(),
+    partial ? getPaceComparison(selected, active.elapsedDays) : null,
   ])
 
-  // The average excludes the selected period, so "vs average" compares this
-  // period against the others rather than partly against itself.
-  const others = trend.filter((point) => point.periodStart !== selected)
-  const averageLiving =
+  // A part-finished period is compared against the same point in prior periods.
+  // A closed one is compared against whole prior periods, excluding itself so
+  // it is not partly measured against its own value.
+  // Only closed periods, and never the selected one. A period still running is
+  // a partial total, and averaging it in drags the benchmark down by however
+  // far through it we happen to be.
+  const closed = new Set(periods.filter((p) => !p.isCurrent).map((p) => p.start))
+  const others = trend.filter((point) => point.periodStart !== selected && closed.has(point.periodStart))
+  const wholePeriodAverage =
     others.length > 0 ? others.reduce((sum, p) => sum + p.living, 0) / others.length : 0
+
+  const comparison = partial
+    ? { average: pace!.average, label: `vs average by day ${active.elapsedDays}` }
+    : { average: wholePeriodAverage, label: 'vs 12-period average' }
+
+  const previous = periods.find((p) => p.start < selected && p.hasData)
 
   return (
     <>
@@ -100,9 +122,36 @@ export default async function DashboardPage({
         </div>
       )}
 
-      <section className="card">
-        <Sieve data={sieve} averageLiving={averageLiving} />
-      </section>
+      {sieve.totalOut === 0 && active.isCurrent ? (
+        <section className="card">
+          <div className="empty">
+            <strong>Nothing yet this period</strong>
+            {active.elapsedDays === 1
+              ? 'This period started today.'
+              : `${active.elapsedDays} days in, and nothing has come through yet.`}{' '}
+            {previous && (
+              <>
+                <Link href={`/?period=${previous.start}`}>
+                  See {periodLabel(previous.start, previous.end)}
+                </Link>{' '}
+                instead.
+              </>
+            )}
+          </div>
+        </section>
+      ) : (
+        <section className="card">
+          <Sieve
+            data={sieve}
+            comparison={comparison}
+            progress={
+              partial
+                ? { elapsedDays: active.elapsedDays, totalDays: active.totalDays }
+                : undefined
+            }
+          />
+        </section>
+      )}
 
       <section className="card">
         <div className="card-head">
@@ -114,7 +163,9 @@ export default async function DashboardPage({
             </p>
           </div>
         </div>
-        <TrendChart points={trend} selected={selected} average={averageLiving} />
+        {/* Always the whole-period average: the chart's columns are whole
+            periods, whatever the headline above is comparing. */}
+        <TrendChart points={trend} selected={selected} average={wholePeriodAverage} />
       </section>
 
       <section className="card">
