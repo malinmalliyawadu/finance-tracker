@@ -102,8 +102,8 @@ export async function getPeriods(): Promise<Period[]> {
 export async function getPaceComparison(
   periodStart: string,
   elapsedDays: number,
-): Promise<{ average: number; periods: number }> {
-  const [row] = await db<{ average: string; periods: number }[]>`
+): Promise<PaceComparison> {
+  const [row] = await db<{ average: string; whole_average: string; periods: number }[]>`
     with prior as (
       select distinct period_start from transactions
       where period_start < ${periodStart}
@@ -112,17 +112,38 @@ export async function getPaceComparison(
     ),
     by_day as (
       select p.period_start,
-             coalesce(sum(-t.amount) filter (where t.counts_as_spend), 0) as spend
+             coalesce(sum(-t.amount) filter (
+               where t.counts_as_spend
+                 and t.date <= p.period_start + ${Math.max(elapsedDays - 1, 0)}::integer), 0) as to_date,
+             coalesce(sum(-t.amount) filter (where t.counts_as_spend), 0)                      as whole
       from prior p
-      left join transactions t
-        on t.period_start = p.period_start
-       and t.date <= p.period_start + ${Math.max(elapsedDays - 1, 0)}::integer
+      left join transactions t on t.period_start = p.period_start
       group by p.period_start
     )
-    select coalesce(avg(spend), 0) as average, count(*)::int as periods from by_day
+    select coalesce(avg(to_date), 0) as average,
+           coalesce(avg(whole), 0)   as whole_average,
+           count(*)::int             as periods
+    from by_day
   `
 
-  return { average: num(row?.average), periods: Number(row?.periods ?? 0) }
+  return {
+    average: num(row?.average),
+    wholeAverage: num(row?.whole_average),
+    periods: Number(row?.periods ?? 0),
+  }
+}
+
+export type PaceComparison = {
+  /** Living costs by this same day, averaged over the periods before this one. */
+  average: number
+  /**
+   * Whole-period living costs averaged over those same periods. Paired with
+   * `average` deliberately: the ratio between the two is the share of a typical
+   * period that has landed by now, and taking the two figures from different
+   * windows would make that ratio quietly wrong.
+   */
+  wholeAverage: number
+  periods: number
 }
 
 // ---------------------------------------------------------------------------
@@ -357,6 +378,16 @@ export type BudgetLine = {
   /** Average spend per period over the periods before this one. The suggestion. */
   averagePerPeriod: number
   /**
+   * The share of a typical period's spend on this category that has landed by
+   * this day, from its own history. 1 once the period has run its course.
+   *
+   * Exposed rather than kept inside `expectedByNow` because a category with no
+   * limit set still has a history, and this is what lets one be measured
+   * against it: `averagePerPeriod * shapeToDate` is where it usually stands by
+   * now, whether or not anybody budgeted for it.
+   */
+  shapeToDate: number
+  /**
    * What the budget would allow by this point in the period, shaped by how this
    * category has actually landed in past periods rather than pro-rated by day.
    * Equals the budget once the period has run its course.
@@ -467,6 +498,7 @@ export async function getBudget(
       spent: num(row.spent),
       count: Number(row.tx_count),
       averagePerPeriod: num(row.average_per_period),
+      shapeToDate: share,
       expectedByNow: budget === null ? 0 : budget * share,
     }
   })
@@ -560,6 +592,59 @@ export async function getTransactions(filters: TransactionFilters = {}): Promise
     isRecurring: row.is_recurring,
     countsAsSpend: row.counts_as_spend,
   }))
+}
+
+export type BiggestPurchase = {
+  /** Positive: the size of the outflow, not the signed amount. */
+  amount: number
+  /** The merchant where there is one, falling back to the raw descriptor. */
+  name: string
+  date: string
+  category: string | null
+  categoryId: string | null
+}
+
+/**
+ * The single largest one-off living cost in a period, or null if there were
+ * none.
+ *
+ * Its own query rather than the first row of `getTransactions`, which orders by
+ * date: the biggest item in a period is rarely the most recent one, and a
+ * period is often explained by one purchase rather than by a trend.
+ *
+ * Recurring charges are excluded. The mortgage interest is reliably the largest
+ * line in the ledger and reliably the least interesting — pointing at it every
+ * period would be a fact, and useless. What earns a sentence is the thing that
+ * was not going to happen anyway.
+ */
+export async function getBiggestPurchase(periodStart: string): Promise<BiggestPurchase | null> {
+  const [row] = await db<
+    {
+      date: Date
+      description: string
+      merchant_display_name: string | null
+      amount: string
+      category: string | null
+      category_id: string | null
+    }[]
+  >`
+    select date, description, merchant_display_name, amount, category, category_id
+    from transactions
+    where period_start = ${periodStart}
+      and counts_as_spend and amount < 0 and not is_recurring
+    order by amount asc
+    limit 1
+  `
+
+  if (!row) return null
+
+  return {
+    amount: Math.abs(num(row.amount)),
+    name: row.merchant_display_name ?? row.description,
+    date: row.date.toISOString().slice(0, 10),
+    category: row.category,
+    categoryId: row.category_id,
+  }
 }
 
 // ---------------------------------------------------------------------------

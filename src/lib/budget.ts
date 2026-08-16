@@ -80,3 +80,26 @@ export function usedShare(spent: number, budget: number): number {
   if (budget <= 0) return spent > 0 ? 1 : 0
   return Math.min(Math.max(spent / budget, 0), 1)
 }
+
+/**
+ * Too little of a typical period has landed to extrapolate from. Below this,
+ * dividing by the share multiplies whatever noise the first few days happen to
+ * carry — one early insurance premium would project a year of ruin.
+ */
+const MIN_SHARE = 0.15
+
+/**
+ * Where a part-finished total lands if the rest of the period behaves like the
+ * ones before it, or null when it is too early to say.
+ *
+ * `share` is how much of a normal period is already behind us — measured from
+ * history rather than from the calendar, so the same day-shaping that keeps
+ * rent from reading as a blowout also keeps it from inflating the forecast.
+ * The result never comes in below what has already been spent: money that has
+ * gone does not come back, whatever the shape says.
+ */
+export function project(soFar: number, share: number): number | null {
+  if (!(share > 0) || share < MIN_SHARE) return null
+  if (share >= 1) return soFar
+  return Math.max(soFar, soFar / share)
+}

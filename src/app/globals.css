@@ -537,6 +537,227 @@ select {
   font-weight: 500;
 }
 
+/* ------------------------------------------------------- headline tiles -- */
+
+.tiles {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 18px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunk);
+  border: 1px solid var(--line);
+}
+
+/* A tinted panel is reserved for the one state that has to interrupt someone.
+   Three reassuring green panels in a row is the resting state of this page, and
+   a colour that is always on carries no information — so "fine" is the quiet
+   card with a green figure on it, and only "over" takes the whole panel. */
+.tile-alert {
+  background: var(--alert-soft);
+  border-color: transparent;
+}
+
+.tile-value {
+  margin-top: 2px;
+  font-size: clamp(26px, 3.2vw, 36px);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.tile-living .tile-value {
+  color: var(--living);
+}
+
+.tile-alert .tile-value {
+  color: var(--alert);
+}
+
+.tile-note {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+/* The delta is the last line of a tile, so its own top margin is enough. */
+.tile .headline-delta {
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+/* ---------------------------------------------------------- budget track -- */
+
+.track {
+  margin-top: 18px;
+}
+
+.track-bar {
+  position: relative;
+  height: 28px;
+  border-radius: var(--radius);
+  background: var(--surface-sunk);
+  border: 1px solid var(--line);
+  /* visible, not hidden: both marks overhang the track by design, and a mark
+     that lands under the fill is invisible without the overhang. */
+  overflow: visible;
+}
+
+.track-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 3px;
+  opacity: 0.85;
+}
+
+/* The stretch between what has gone and where this pace lands. Same hue as the
+   fill, at a fraction of its weight — a forecast is the same kind of thing as
+   the spending it extends, not a different one. The hatch used elsewhere is
+   spoken for: in this app it means money that does not count. */
+.track-forecast {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 0 3px 3px 0;
+  opacity: 0.26;
+}
+
+/* Centred on the figure it marks rather than starting at it, so a mark that
+   lands on the end of the track straddles the edge instead of falling off it. */
+.track-mark {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  transform: translateX(-50%);
+  background: var(--ink);
+  opacity: 0.55;
+  border-radius: 1px;
+}
+
+/* The limit itself, which has to win against the pace mark when they land close
+   together. Full height and full strength. */
+.track-mark-budget {
+  top: -6px;
+  bottom: -6px;
+  width: 3px;
+  opacity: 1;
+}
+
+.track-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.track-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.track-key {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  opacity: 0.85;
+}
+
+.track-key-forecast {
+  opacity: 0.26;
+}
+
+.track-key-mark {
+  flex: 0 0 auto;
+  width: 2px;
+  height: 12px;
+  background: var(--ink);
+  opacity: 0.55;
+  border-radius: 1px;
+}
+
+.track-key-mark-budget {
+  width: 3px;
+  opacity: 1;
+}
+
+.track-foot {
+  margin-top: 14px;
+}
+
+/* ----------------------------------------------------------- commentary -- */
+
+.insights {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.insight {
+  border-top: 1px solid var(--line);
+}
+
+.insight:first-child {
+  border-top: 0;
+}
+
+.insight-body {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  gap: 12px;
+  padding: 11px 0;
+  text-decoration: none;
+  color: inherit;
+}
+
+/* A dot rather than a coloured row: four alarming panels in a column read as an
+   emergency whatever they happen to say. */
+.insight-body::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: var(--excluded);
+}
+
+.insight-alert .insight-body::before {
+  background: var(--alert);
+}
+
+.insight-warn .insight-body::before {
+  background: var(--warn);
+}
+
+.insight-good .insight-body::before {
+  background: var(--living);
+}
+
+.insight-headline {
+  display: block;
+  font-weight: 600;
+}
+
+.insight-detail {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+a.insight-body:hover .insight-headline {
+  text-decoration: underline;
+}
+
 /* ---------------------------------------------------------------- chart -- */
 
 .chart {
