@@ -10,6 +10,7 @@
 import type postgres from 'postgres'
 
 import type { AkahuAccount, AkahuTransaction } from './akahu.ts'
+import { nzDate } from './time.ts'
 
 export async function upsertAccount(sql: postgres.Sql, account: AkahuAccount): Promise<string> {
   const [row] = await sql<{ id: string }[]>`
@@ -49,7 +50,11 @@ export async function writeTransactions(
     external_id: txn._id,
     source: 'akahu',
     account_id: accountId,
-    date: txn.date.slice(0, 10),
+    // Akahu dates arrive as UTC instants. Slicing the first ten characters
+    // takes the UTC calendar day, which for the whole New Zealand morning is
+    // yesterday - a 9am coffee posts as the day before, and one bought on the
+    // 16th lands in the statement period that closed the night before.
+    date: nzDate(txn.date),
     description: txn.description,
     amount: txn.amount,
     raw: txn,

@@ -1,5 +1,7 @@
 import postgres from 'postgres'
 
+import { NZ_TIME_ZONE } from './time.ts'
+
 /**
  * Postgres connections. Server-side only: nothing in this file may be imported
  * into a client component, and the browser never opens a database socket.
@@ -55,6 +57,15 @@ function create(role: Role): postgres.Sql {
     idle_timeout: 20,
     ssl: sslFor(),
     transform: { undefined: null },
+    // Defence in depth for the time zone, not the fix for it.
+    //
+    // Every query that needs today's date calls app_today(), which reads
+    // settings.timezone and is therefore right no matter who is connected. But
+    // a session left on the container's UTC makes `current_date` mean
+    // yesterday for the whole New Zealand morning, and that is a trap for the
+    // next query anyone writes - including one typed by hand against this
+    // connection. Pinning the session means the obvious thing is also correct.
+    connection: { TimeZone: NZ_TIME_ZONE },
   })
 }
 

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 
 import type { Period } from '../lib/queries.ts'
-import { periodLabel, toDate } from '../lib/format.ts'
+import { monthShort, periodLabel, toDate } from '../lib/format.ts'
 
 /**
  * Statement periods run the 16th to the 15th, not calendar months, so the
@@ -61,7 +61,7 @@ export function PeriodPicker({
  */
 function chipLabel(period: Period, isOldest: boolean): string {
   const start = toDate(period.start)
-  const month = new Intl.DateTimeFormat('en-NZ', { month: 'short' }).format(start)
+  const month = monthShort(start)
   const showYear = isOldest || start.getUTCMonth() === 0
   return showYear ? `${month} ${String(start.getUTCFullYear()).slice(2)}` : month
 }
