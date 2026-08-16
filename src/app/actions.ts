@@ -2,8 +2,10 @@
 
 import { revalidatePath } from 'next/cache'
 
+import { suggestedAmount } from '../lib/budget.ts'
 import { db, syncDb } from '../lib/db.ts'
 import { importGemStatement } from '../lib/import-gem.ts'
+import { getBudget, getPeriods } from '../lib/queries.ts'
 import { recompute } from '../lib/recompute.ts'
 import type { ExclusionReason } from '../lib/rules-file.ts'
 
@@ -123,6 +125,168 @@ export async function importStatement(
     // file in the wrong format.
     return { status: 'error', message: error instanceof Error ? error.message : String(error) }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Budget
+// ---------------------------------------------------------------------------
+
+/**
+ * Writes every changed figure in a submitted budget form.
+ *
+ * A line is only written when the number actually changed, so re-saving an
+ * untouched form adds no versions and the history stays a record of decisions
+ * rather than of visits to the page.
+ */
+async function applyBudgetForm(periodStart: string, formData: FormData): Promise<void> {
+  const categories = await db<{ id: string }[]>`
+    select id from categories where kind = 'expense'
+  `
+  const inForce = new Map(
+    (
+      await db<{ category_id: string; amount: string | null; effective_from: Date }[]>`
+        select category_id, amount, effective_from from budget_for_period(${periodStart})
+      `
+    ).map((row) => [
+      row.category_id,
+      {
+        amount: row.amount === null ? null : Number(row.amount),
+        isThisPeriod: row.effective_from.toISOString().slice(0, 10) === periodStart,
+      },
+    ]),
+  )
+
+  const set: { categoryId: string; amount: number }[] = []
+  const cleared: string[] = []
+
+  for (const { id } of categories) {
+    const field = formData.get(`amount:${id}`)
+    // Absent rather than empty: the field was not part of this form at all.
+    if (field === null) continue
+
+    const current = inForce.get(id)
+    const text = String(field).replace(/[$,\s]/g, '')
+
+    if (text === '') {
+      // Blank means not budgeted. Recording that only matters when a limit is
+      // in force to switch off, or when this period's own row is a tombstone
+      // that may now be redundant.
+      if (current !== undefined && (current.amount !== null || current.isThisPeriod)) {
+        cleared.push(id)
+      }
+      continue
+    }
+
+    const amount = Number(text)
+    if (!Number.isFinite(amount) || amount < 0) continue
+
+    const rounded = Math.round(amount * 100) / 100
+    if (current?.amount === rounded) continue
+
+    set.push({ categoryId: id, amount: rounded })
+  }
+
+  if (set.length === 0 && cleared.length === 0) return
+
+  await db.begin(async (tx) => {
+    for (const line of set) {
+      await tx`
+        insert into budget_lines (category_id, effective_from, amount)
+        values (${line.categoryId}, ${periodStart}, ${line.amount})
+        on conflict (category_id, effective_from) do update set amount = excluded.amount
+      `
+    }
+
+    for (const categoryId of cleared) {
+      // Drop this period's own line first, then write a tombstone only if an
+      // older line would otherwise show through. Clearing a limit set in this
+      // same period therefore leaves no row at all, rather than a null that
+      // says nothing.
+      await tx`
+        delete from budget_lines
+        where category_id = ${categoryId} and effective_from = ${periodStart}
+      `
+      await tx`
+        insert into budget_lines (category_id, effective_from, amount)
+        select ${categoryId}, ${periodStart}, null
+        where exists (
+          select 1 from budget_for_period(${periodStart}) b
+          where b.category_id = ${categoryId} and b.amount is not null
+        )
+      `
+    }
+  })
+}
+
+/**
+ * Saves the budget for a period.
+ *
+ * Editing while an older period is selected is meaningful and supported: the
+ * line takes effect from that period and every period after it, up to the next
+ * line that supersedes it.
+ */
+export async function saveBudget(formData: FormData): Promise<void> {
+  // Only a real period start, so a hand-edited form cannot anchor a line to a
+  // date no period ever begins on.
+  const periodStart = String(formData.get('periodStart') ?? '')
+  const periods = await getPeriods()
+  if (!periods.some((period) => period.start === periodStart)) return
+
+  await applyBudgetForm(periodStart, formData)
+  revalidatePath('/', 'layout')
+}
+
+/**
+ * Fills every category that has no budget yet with what it has actually been
+ * costing, rounded to the nearest ten.
+ *
+ * Starting from a blank grid of twenty categories is the reason budgets do not
+ * get written. Starting from what the last six periods actually cost turns it
+ * into editing a handful of figures.
+ *
+ * Anything already carrying a decision is left alone, including categories
+ * deliberately switched off and figures typed into the form but not yet saved,
+ * which are written first. This fills blanks and never overwrites a judgement,
+ * so it is always safe to press.
+ */
+export async function seedBudgetFromAverages(formData: FormData): Promise<void> {
+  const periodStart = String(formData.get('periodStart') ?? '')
+  const periods = await getPeriods()
+  const period = periods.find((p) => p.start === periodStart)
+  if (!period) return
+
+  await applyBudgetForm(periodStart, formData)
+
+  const decided = new Set(
+    (
+      await db<{ category_id: string }[]>`
+        select category_id from budget_for_period(${periodStart})
+      `
+    ).map((row) => row.category_id),
+  )
+
+  // Same averages the editor shows as a hint, from the same query, so the
+  // button cannot suggest one figure while the page displays another.
+  const { lines } = await getBudget(periodStart, period.elapsedDays, period.totalDays)
+
+  const seeds = lines
+    .filter((line) => !decided.has(line.categoryId))
+    .map((line) => ({ categoryId: line.categoryId, amount: suggestedAmount(line.averagePerPeriod) }))
+    .filter((seed): seed is { categoryId: string; amount: number } => seed.amount !== null)
+
+  if (seeds.length === 0) return
+
+  await db.begin(async (tx) => {
+    for (const seed of seeds) {
+      await tx`
+        insert into budget_lines (category_id, effective_from, amount)
+        values (${seed.categoryId}, ${periodStart}, ${seed.amount})
+        on conflict (category_id, effective_from) do update set amount = excluded.amount
+      `
+    }
+  })
+
+  revalidatePath('/', 'layout')
 }
 
 /**

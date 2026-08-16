@@ -332,6 +332,161 @@ export async function getCategories(): Promise<
 }
 
 // ---------------------------------------------------------------------------
+// Budget
+// ---------------------------------------------------------------------------
+
+/**
+ * How many prior periods the suggested amount averages over.
+ *
+ * Lifetime, as the categories page uses, is the right window for "is this
+ * normal for me". It is the wrong one for "what should I aim for next month",
+ * where a figure from two years ago is noise. Six periods is half a year: long
+ * enough to absorb a quarterly bill, short enough to reflect what life costs
+ * now.
+ */
+const AVERAGE_PERIODS = 6
+
+export type BudgetLine = {
+  categoryId: string
+  category: string
+  isConsumption: boolean
+  /** null means not budgeted: either never set, or explicitly switched off. */
+  budget: number | null
+  spent: number
+  count: number
+  /** Average spend per period over the periods before this one. The suggestion. */
+  averagePerPeriod: number
+  /**
+   * What the budget would allow by this point in the period, shaped by how this
+   * category has actually landed in past periods rather than pro-rated by day.
+   * Equals the budget once the period has run its course.
+   */
+  expectedByNow: number
+}
+
+export type Budget = {
+  /** Every expense category, budgeted or not, in the order the editor lists them. */
+  lines: BudgetLine[]
+  budgeted: BudgetLine[]
+  /** Spent against, but never budgeted for. The gap between a budget and a plan. */
+  unbudgeted: BudgetLine[]
+  total: number
+  spent: number
+  unbudgetedSpent: number
+  expectedByNow: number
+  exists: boolean
+}
+
+/**
+ * A period's budget beside what it actually cost.
+ *
+ * `elapsedDays` and `totalDays` come from the period itself; pass the full
+ * length for a period that has closed. Expected-to-date is deliberately not a
+ * straight-line pro-rate of the limit: rent lands on day one and the power bill
+ * on day twenty, so a linear budget line reports every fixed cost as a blowout
+ * for the first half of the period and then quietly recovers. Instead each
+ * category is shaped by its own history — the share of a typical period's spend
+ * that has landed by this day — and only falls back to straight-line when there
+ * is no history to shape it with.
+ */
+export async function getBudget(
+  periodStart: string,
+  elapsedDays: number,
+  totalDays: number,
+): Promise<Budget> {
+  const rows = await db<
+    {
+      category_id: string
+      category: string
+      is_consumption: boolean
+      budget: string | null
+      spent: string
+      tx_count: string
+      average_per_period: string
+      shape_to_day: string
+      shape_whole: string
+    }[]
+  >`
+    with recent as (
+      select distinct period_start from transactions
+      where period_start < ${periodStart}
+      order by period_start desc
+      limit ${AVERAGE_PERIODS}
+    ),
+    history as (
+      select
+        t.category_id,
+        sum(-t.amount) / nullif((select count(*) from recent), 0) as average_per_period,
+        coalesce(sum(-t.amount) filter (
+          where t.date <= r.period_start + ${Math.max(elapsedDays - 1, 0)}::integer), 0) as shape_to_day,
+        sum(-t.amount) as shape_whole
+      from recent r
+      join transactions t on t.period_start = r.period_start
+      where t.exclusion_reason is null and t.category_kind = 'expense'
+      group by t.category_id
+    ),
+    actual as (
+      select category_id, sum(-amount) as spent, count(*) as tx_count
+      from transactions
+      where period_start = ${periodStart}
+        and exclusion_reason is null and category_kind = 'expense'
+      group by category_id
+    )
+    select
+      c.id                                as category_id,
+      c.name                              as category,
+      c.is_consumption,
+      b.amount                            as budget,
+      coalesce(a.spent, 0)                as spent,
+      coalesce(a.tx_count, 0)             as tx_count,
+      coalesce(h.average_per_period, 0)   as average_per_period,
+      coalesce(h.shape_to_day, 0)         as shape_to_day,
+      coalesce(h.shape_whole, 0)          as shape_whole
+    from categories c
+    left join budget_for_period(${periodStart}) b on b.category_id = c.id
+    left join actual  a on a.category_id = c.id
+    left join history h on h.category_id = c.id
+    where c.kind = 'expense'
+    order by c.sort_order, c.name
+  `
+
+  const straightLine = totalDays > 0 ? Math.min(elapsedDays / totalDays, 1) : 1
+
+  const lines: BudgetLine[] = rows.map((row) => {
+    const budget = row.budget === null ? null : num(row.budget)
+    const whole = num(row.shape_whole)
+    // Refunds can push a part-period total above the whole or below zero, so
+    // the share is clamped rather than trusted.
+    const share = whole > 0 ? Math.min(Math.max(num(row.shape_to_day) / whole, 0), 1) : straightLine
+
+    return {
+      categoryId: row.category_id,
+      category: row.category,
+      isConsumption: row.is_consumption,
+      budget,
+      spent: num(row.spent),
+      count: Number(row.tx_count),
+      averagePerPeriod: num(row.average_per_period),
+      expectedByNow: budget === null ? 0 : budget * share,
+    }
+  })
+
+  const budgeted = lines.filter((line) => line.budget !== null)
+  const unbudgeted = lines.filter((line) => line.budget === null && line.spent > 0)
+
+  return {
+    lines,
+    budgeted,
+    unbudgeted,
+    total: budgeted.reduce((sum, line) => sum + (line.budget ?? 0), 0),
+    spent: budgeted.reduce((sum, line) => sum + line.spent, 0),
+    unbudgetedSpent: unbudgeted.reduce((sum, line) => sum + line.spent, 0),
+    expectedByNow: budgeted.reduce((sum, line) => sum + line.expectedByNow, 0),
+    exists: budgeted.length > 0,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Transactions
 // ---------------------------------------------------------------------------
 
