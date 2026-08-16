@@ -3,7 +3,7 @@ import { CsvUpload } from '../../../components/csv-upload.tsx'
 import { listPasskeys } from '../../../lib/auth/passkeys.ts'
 import { authEnabled } from '../../../lib/auth/session.ts'
 import { getAccounts, getRecentSyncs, getSettings } from '../../../lib/queries.ts'
-import { fullDate, money, plural } from '../../../lib/format.ts'
+import { dateTime, fullDate, money, plural } from '../../../lib/format.ts'
 import { forgetPasskey } from '../../auth-actions.ts'
 import { setStatementStartDay } from '../../actions.ts'
 
@@ -269,7 +269,7 @@ export default async function AccountsPage() {
                 {syncs.map((run) => (
                   <tr key={run.startedAt}>
                     <td style={{ fontSize: 12 }}>
-                      {new Date(run.startedAt).toLocaleString('en-NZ')}
+                      {dateTime(run.startedAt)}
                     </td>
                     <td style={{ fontSize: 12, color: 'var(--ink-muted)' }}>{run.trigger}</td>
                     <td>

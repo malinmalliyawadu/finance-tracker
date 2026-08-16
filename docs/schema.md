@@ -275,6 +275,36 @@ function it is a settings change. Verified over a two-year run of dates: 730
 days map onto 25 periods with every day inside exactly one, and `start_day` is
 capped at 28 so no month can produce a partial period.
 
+### "Today" is a New Zealand date, and never `current_date`
+
+`current_date` is the date in the connecting session's time zone, and every
+session this app opens is UTC - the container, the Postgres image, and the
+deployed database all default to it. From midnight until noon New Zealand time,
+`current_date` is therefore yesterday, which puts the dashboard in the previous
+statement period for the whole morning of the 16th and makes `elapsed_days`
+short by one every morning of every day.
+
+`app_today()` is the reader instead. It resolves `now()` into
+`settings.timezone` - until 0009 that column had sat in the schema since 0003
+without a single reader - and every query asking what day it is goes through it.
+`lib/time.ts` mirrors the same value for the TypeScript side.
+
+The distinction the whole scheme rests on:
+
+- **A calendar date** is what a bank statement means by a date: no time and no
+  zone. Stored as `date`, carried in TypeScript as `YYYY-MM-DD` or as a Date
+  pinned to UTC midnight, and formatted with the zone pinned to UTC so the day
+  that comes out is the day that went in - on a server in Auckland, a server in
+  UTC, and a browser in Los Angeles alike.
+- **An instant** is a real point in time, like when a sync ran. Stored as
+  `timestamptz` and displayed in New Zealand time.
+
+Converting between the two is the only place a zone is allowed to matter.
+Akahu sends instants, so ingest converts once, at the boundary: taking the first
+ten characters of a UTC instant - which is what it used to do - dates every
+transaction made before noon a day early, and one made on the morning of the
+16th falls into the period that closed the night before.
+
 ### A budget is versioned, not stored per period
 
 `budget_lines` records an amount and the date it takes effect. The budget in

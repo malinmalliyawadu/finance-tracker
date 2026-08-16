@@ -8,6 +8,11 @@ const num = (value: unknown): number => Number(value ?? 0)
 export type Settings = {
   statementStartDay: number
   largePurchaseThreshold: number
+  /**
+   * The zone the app's calendar runs on. Read by `app_today()` in SQL, which is
+   * what every query asking "what day is it" goes through; mirrored in
+   * TypeScript by NZ_TIME_ZONE in lib/time.ts.
+   */
   timezone: string
 }
 
@@ -56,7 +61,7 @@ export async function getPeriods(): Promise<Period[]> {
   >`
     with settings_row as (select statement_start_day from settings limit 1),
     current_period as (
-      select statement_period_start(current_date, statement_start_day) as period_start
+      select statement_period_start(app_today(), statement_start_day) as period_start
       from settings_row
     ),
     all_periods as (
@@ -68,7 +73,7 @@ export async function getPeriods(): Promise<Period[]> {
       p.period_start,
       statement_period_end(p.period_start)                            as period_end,
       (p.period_start = (select period_start from current_period))    as is_current,
-      (current_date - p.period_start + 1)                             as elapsed_days,
+      (app_today() - p.period_start + 1)                              as elapsed_days,
       (statement_period_end(p.period_start) - p.period_start + 1)     as total_days,
       exists (select 1 from transactions t where t.period_start = p.period_start) as has_data
     from all_periods p
@@ -687,7 +692,7 @@ export async function getRecurring(): Promise<RecurringRow[]> {
       count(*)              as charge_count,
       avg(-amount)          as average_amount,
       max(date)             as last_charged,
-      (current_date - max(date)) as days_since_last,
+      (app_today() - max(date)) as days_since_last,
       bool_or(is_payg)      as is_payg
     from transactions
     where is_recurring

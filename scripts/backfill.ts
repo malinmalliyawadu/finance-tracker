@@ -20,6 +20,7 @@
 import { createAkahuClient } from '../src/lib/akahu.ts'
 import { connect } from '../src/lib/db.ts'
 import { countRevised, countTransactions, upsertAccount, writeTransactions } from '../src/lib/ingest.ts'
+import { nzDate } from '../src/lib/time.ts'
 
 const args = process.argv.slice(2)
 const dryRun = args.includes('--dry-run')
@@ -97,7 +98,10 @@ try {
       fetched += page.length
 
       for (const txn of page) {
-        const date = txn.date.slice(0, 10)
+        // The same conversion writeTransactions does, for the same reason. If
+        // these two disagreed, oldest_transaction_date would not be a date any
+        // transaction actually has.
+        const date = nzDate(txn.date)
         if (oldest === null || date < oldest) oldest = date
         if (newest === null || date > newest) newest = date
       }
@@ -185,8 +189,14 @@ try {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * The window bounds as calendar dates, for logging and for the shortfall
+ * report. New Zealand dates, because they are compared against transaction
+ * dates and read by someone in New Zealand - the UTC day would make a backfill
+ * run before noon look a day short of what was asked for.
+ */
 function iso(date: Date): string {
-  return date.toISOString().slice(0, 10)
+  return nzDate(date)
 }
 
 function log(fields: Record<string, unknown>): void {

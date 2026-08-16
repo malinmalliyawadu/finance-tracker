@@ -1,3 +1,9 @@
+import { NZ_TIME_ZONE, calendarDate as toDate } from './time.ts'
+
+// Re-exported because the display layer reaches for it constantly and should
+// not have to know which module encodes a calendar date.
+export { toDate }
+
 const NZD = new Intl.NumberFormat('en-NZ', {
   style: 'currency',
   currency: 'NZD',
@@ -26,13 +32,32 @@ export function percent(value: number, digits = 0): string {
   return `${value >= 0 ? '+' : ''}${(value * 100).toFixed(digits)}%`
 }
 
-const DAY_MONTH = new Intl.DateTimeFormat('en-NZ', { day: 'numeric', month: 'short' })
-const DAY_MONTH_YEAR = new Intl.DateTimeFormat('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })
-const MONTH_SHORT = new Intl.DateTimeFormat('en-NZ', { month: 'short' })
+/**
+ * Every date formatter is pinned to UTC, and that is not a contradiction of the
+ * app being in New Zealand time - it is what makes it true.
+ *
+ * These render calendar dates, which `calendarDate` encodes as UTC midnight. A
+ * formatter left unpinned reads that instant in whatever zone it is running
+ * in, so the same transaction renders as the 16th on the server and the 15th
+ * in a browser in Los Angeles, and Next hydration finds the two disagreeing.
+ * Pinning to UTC undoes the encoding exactly, and the day that comes out is the
+ * day the bank put in.
+ *
+ * Instants are a different question and are formatted by `dateTime` below.
+ */
+const calendarFormat = (options: Intl.DateTimeFormatOptions) =>
+  new Intl.DateTimeFormat('en-NZ', { timeZone: 'UTC', ...options })
 
-export function toDate(value: Date | string): Date {
-  return value instanceof Date ? value : new Date(`${value}T00:00:00Z`)
-}
+const DAY_MONTH = calendarFormat({ day: 'numeric', month: 'short' })
+const DAY_MONTH_YEAR = calendarFormat({ day: 'numeric', month: 'short', year: 'numeric' })
+const MONTH_SHORT = calendarFormat({ month: 'short' })
+
+/** A real point in time, in New Zealand: "16/08/2026, 9:04 am". */
+const NZ_DATE_TIME = new Intl.DateTimeFormat('en-NZ', {
+  timeZone: NZ_TIME_ZONE,
+  dateStyle: 'short',
+  timeStyle: 'short',
+})
 
 export function shortDate(value: Date | string): string {
   return DAY_MONTH.format(toDate(value))
@@ -40,6 +65,22 @@ export function shortDate(value: Date | string): string {
 
 export function fullDate(value: Date | string): string {
   return DAY_MONTH_YEAR.format(toDate(value))
+}
+
+/** Abbreviated month of a calendar date: "Aug". */
+export function monthShort(value: Date | string): string {
+  return MONTH_SHORT.format(toDate(value))
+}
+
+/**
+ * A real point in time - when a sync ran - in New Zealand time.
+ *
+ * Distinct from the calendar-date formatters above, and the only formatter that
+ * converts zones. A sync that finished at 9:04am should say 9:04am to the
+ * person who ran it, not 21:04 the previous day because the container is UTC.
+ */
+export function dateTime(instant: Date | string): string {
+  return NZ_DATE_TIME.format(instant instanceof Date ? instant : new Date(instant))
 }
 
 /** "16 Aug – 15 Sep 2026". The period is the app's unit of time, so it is always spelled out. */
