@@ -169,10 +169,14 @@ shows up as a run with `new: 0`, not as silence.
 
 Two resources from this repo.
 
-**1. Postgres.** Coolify's managed Postgres. Then, once, from the app container:
+**1. Postgres.** Coolify's managed Postgres. Migrations apply themselves: the
+container runs `scripts/migrate.ts` before it serves, so a deploy carrying a new
+migration cannot come up against the old schema, and a migration that fails
+stops the container rather than shipping pages that 500. Everything else is a
+one-off, from the app container:
 
 ```bash
-npm run db:migrate && npm run seed:rules && npm run backfill && npm run recompute
+npm run seed:rules && npm run backfill && npm run recompute
 ```
 
 Import the Flight Centre CSV separately — it is the one source nothing fetches.

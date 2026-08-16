@@ -29,8 +29,9 @@ RUN addgroup -S ledger && adduser -S ledger -G ledger
 COPY --from=builder --chown=ledger:ledger /app/.next/standalone ./
 COPY --from=builder --chown=ledger:ledger /app/.next/static ./.next/static
 
-# Migrations, seeds and the sync jobs run as Coolify scheduled tasks inside
-# this same image, so they ship with it. Node 24 runs the TypeScript directly.
+# The migration runner, the seeds and the sync jobs all ship with the image:
+# migrations run on boot (see CMD), the rest run as Coolify scheduled tasks
+# inside this same image. Node 24 runs the TypeScript directly.
 COPY --from=builder --chown=ledger:ledger /app/db ./db
 COPY --from=builder --chown=ledger:ledger /app/scripts ./scripts
 COPY --from=builder --chown=ledger:ledger /app/src ./src
@@ -48,4 +49,12 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
   CMD node -e "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["node", "server.js"]
+# Apply pending migrations, then serve. Coolify provides DATABASE_URL.
+#
+# On boot rather than as a separate step, because the alternative is a deploy
+# that succeeds while the schema the new code expects is not there yet: the
+# image ships and the pages that need the new table 500 until someone
+# remembers. `&&` means a failed migration stops the container from serving at
+# all, which is the honest outcome. The runner is idempotent, so a restart that
+# migrates nothing costs one query.
+CMD ["sh", "-c", "node scripts/migrate.ts && node server.js"]
