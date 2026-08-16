@@ -1,12 +1,12 @@
 import Link from 'next/link'
 
-import { BudgetTrack } from '../components/budget-track.tsx'
-import { CategoryBars } from '../components/category-bars.tsx'
-import { Commentary } from '../components/commentary.tsx'
-import { HeadlineTiles } from '../components/headline-tiles.tsx'
-import { PeriodPicker } from '../components/period-picker.tsx'
-import { Sieve } from '../components/sieve.tsx'
-import { TrendChart } from '../components/trend-chart.tsx'
+import { BudgetTrack } from '../../components/budget-track.tsx'
+import { CategoryBars } from '../../components/category-bars.tsx'
+import { Commentary } from '../../components/commentary.tsx'
+import { HeadlineTiles } from '../../components/headline-tiles.tsx'
+import { PeriodPicker } from '../../components/period-picker.tsx'
+import { Sieve } from '../../components/sieve.tsx'
+import { TrendChart } from '../../components/trend-chart.tsx'
 import {
   getBiggestPurchase,
   getBudget,
@@ -17,15 +17,15 @@ import {
   getSettings,
   getSieve,
   getTrend,
-} from '../lib/queries.ts'
+} from '../../lib/queries.ts'
 import {
   comparisonFor,
   forecastFor,
   headlineTiles,
   insightsFor,
   type Reading,
-} from '../lib/dashboard.ts'
-import { moneyWhole, periodLabel, periodRule } from '../lib/format.ts'
+} from '../../lib/dashboard.ts'
+import { moneyWhole, periodLabel, periodRule } from '../../lib/format.ts'
 
 export const dynamic = 'force-dynamic'
 

@@ -230,8 +230,17 @@ select {
   color: var(--ink-faint);
 }
 
-.rail-foot {
+/* Everything that sits below the links, pushed down as one block. The foot is
+   optional and the sign-out control is optional, so the push belongs on the
+   wrapper rather than on whichever of them happens to be rendered. */
+.rail-bottom {
   margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rail-foot {
   padding: 12px 10px 0;
   border-top: 1px solid var(--line);
   display: flex;
@@ -1242,15 +1251,29 @@ tbody tr:hover td {
     flex-direction: row;
     align-items: center;
     gap: 12px;
-    overflow-x: auto;
     border-right: 0;
     border-bottom: 1px solid var(--line);
     padding: 12px var(--gutter);
   }
 
+  /* The links scroll, not the whole bar. When the bar itself scrolled, sign out
+     sat past the right-hand edge of eight nav links and there was no sign it
+     was there at all. */
   .rail-nav {
     flex-direction: row;
     gap: 4px;
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+  }
+
+  .rail-brand,
+  .rail-bottom {
+    flex-shrink: 0;
+  }
+
+  .rail-bottom {
+    margin-top: 0;
   }
 
   .rail-link small,
@@ -1473,4 +1496,150 @@ tbody tr:hover td {
   height: 100%;
   background: var(--living);
   border-radius: 2px;
+}
+
+/* --------------------------------------------------------------- signin -- */
+
+/* The login page renders outside the shell, so it brings its own centring
+   rather than living inside .main. */
+.signin {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px var(--gutter);
+}
+
+.signin-card {
+  width: 100%;
+  max-width: 380px;
+  padding: 28px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+.signin-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+
+.signin-brand strong {
+  font-family: var(--font-display), sans-serif;
+  font-size: 17px;
+  letter-spacing: -0.03em;
+}
+
+.signin-brand span {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.signin-card h1 {
+  font-size: 24px;
+  margin-bottom: 6px;
+}
+
+.signin-card > p {
+  font-size: 13px;
+  color: var(--ink-muted);
+  margin-bottom: 22px;
+}
+
+.signin-forms {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.signin-passkey,
+.signin-password {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Full width in a single column: there is nothing else on the page to line the
+   buttons up against, and a 90px button under a 324px field reads as an
+   afterthought. */
+.signin-btn {
+  width: 100%;
+  padding: 9px 12px;
+  text-align: center;
+}
+
+.signin-field {
+  padding: 8px 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+}
+
+.signin-field input {
+  width: 100%;
+}
+
+.signin-error {
+  color: var(--alert);
+}
+
+/* A rule with the word on it, so the password is visibly the second way in
+   rather than a second, equal one. */
+.signin-or {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink-faint);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.signin-or::before,
+.signin-or::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+/* -------------------------------------------------------------- passkeys -- */
+
+.rail-signout-btn {
+  width: 100%;
+  font-size: 12px;
+}
+
+.passkey-add {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* The field grows with the row rather than holding a fixed 240px, so on a phone
+   the label keeps its line and the input takes what is left. Wrapped, "NAME IT"
+   reads as two words in a box. */
+.passkey-add .field {
+  flex: 1 1 220px;
+  /* Capped so the button stays beside the box it belongs to instead of being
+     pushed to the far edge of a wide card. */
+  max-width: 340px;
+}
+
+.passkey-add .field label {
+  white-space: nowrap;
+}
+
+.passkey-add .field input {
+  width: auto;
+  flex: 1;
+}
+
+.passkey-blocked {
+  max-width: 62ch;
 }

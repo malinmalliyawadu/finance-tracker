@@ -4,8 +4,9 @@ Personal finance tracking for a Wellington contractor. Pulls transactions from
 Akahu daily, classifies them from an editable rule set, and reports what was
 actually spent as distinct from what merely moved.
 
-Next.js (App Router, TypeScript), Postgres, self-hosted on Coolify. Four runtime
-dependencies: `next`, `react`, `react-dom`, `postgres`.
+Next.js (App Router, TypeScript), Postgres, self-hosted on Coolify. Six runtime
+dependencies: `next`, `react`, `react-dom`, `postgres`, and the two halves of
+`@simplewebauthn` for passkeys.
 
 ## Status
 
@@ -16,13 +17,78 @@ dependencies: `next`, `react`, `react-dom`, `postgres`.
 | 3. Categorisation engine + tests         | done (built out of order) |
 | 4. Scheduled sync                        | done                      |
 | 5. UI                                    | done                      |
-
-> **The app has no authentication.** Anyone who can reach the URL sees every
-> figure in it. This is a deliberate, deferred decision — put Basic Auth on the
-> Coolify proxy, or keep it off the public internet, until it is addressed.
+| 6. Sign-in                               | done                      |
 
 Running on real data: 1,289 transactions from eight Akahu accounts plus 375
 imported from the Flight Centre Mastercard CSV.
+
+## Signing in
+
+`APP_PASSWORD` is the whole configuration. Set it and every route is gated;
+leave it unset and the app is open, which is what running locally against a
+throwaway database wants. It is read on every request rather than at module
+load, so an image built without secrets and run with them behaves the way its
+environment says it should.
+
+There are no accounts, no email, no registration and no user table. One
+household, one password.
+
+**The session cookie carries no secret and needs no second environment
+variable.** It is a signed ticket — a payload, an expiry, and an HMAC over both,
+keyed by `APP_PASSWORD` itself. Three things follow, and they are the reason
+there is no `SESSION_SECRET`:
+
+- a stolen cookie is a stolen session, not a stolen password;
+- there is nothing extra to distribute, or to forget to set;
+- changing the password signs every device out, for free.
+
+Signed with Web Crypto rather than `node:crypto`, because the same code runs in
+middleware and in server actions and only one of those has Node's crypto.
+`tests/auth.test.ts` covers every way a ticket can be wrong.
+
+### Passkeys
+
+A passkey is a faster way to present the same fact, so the password stays the
+root of trust: **registration is only allowed to someone already signed in**,
+checked inside the registration action itself and not merely by the route guard.
+Every registered credential therefore descends from someone who knew the
+password. Manage them on the Accounts page.
+
+Only public keys are stored — `db/migrations/0008_passkeys.sql`. Sign-in uses
+discoverable credentials, so the browser is asked for whatever it holds rather
+than being handed a list of registered credential ids. The relying party is
+derived from the request host (honouring `x-forwarded-*`), which is what makes
+localhost, a LAN address and the real domain all work without configuration.
+`WEBAUTHN_RP_ID` overrides it for a deployment answering on several hostnames.
+
+Passkeys need a **secure context**. Over plain http on a LAN address the browser
+will not offer them at all, and the add-passkey button says so rather than
+failing mysteriously.
+
+The same caveat has a sharper edge for the password: the session cookie is
+`Secure` in production, so a production build served over plain http on a LAN
+address cannot store it, and signing in bounces silently back to the login page.
+Serve it over https, or over `localhost`, which browsers treat as trustworthy.
+
+### The gate
+
+One middleware, so page loads, form posts, server actions and RSC payloads are
+all covered and no page has to remember to check. Only `/login` and static
+assets are exempt.
+
+- Non-GET requests get a **401 rather than a redirect**. Redirecting a POST
+  would replay it against the login page.
+- Where you were going is preserved in `?next=` and returned to afterwards,
+  accepted only as a path beginning with a single `/` so the login page cannot
+  bounce anyone to a lookalike domain.
+- Password attempts are rate limited to eight a minute, in memory, keyed on the
+  **rightmost** `x-forwarded-for` entry — clients can send that header
+  themselves and proxies append rather than replace, so the leftmost value is
+  attacker-chosen. Passkey assertions are not limited; they cannot be guessed.
+
+The login page renders outside the app shell. The nav rail reports transaction
+counts and whether the ledger reconciles, and those must not appear on the one
+page a stranger can reach — hence the `(app)` route group, which changes no URLs.
 
 ## Two sources
 
@@ -65,6 +131,12 @@ With that `.env`:
 DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/finance
 ```
 
+`APP_PASSWORD` is left unset there on purpose: locally the app is open. Set it
+when you want to work on the login page, and reach the app on `localhost` rather
+than a LAN address if you want to exercise passkeys — they need a secure
+context, and `http://localhost` counts as one while `http://192.168.x.x` does
+not.
+
 ## Scripts
 
 | Command              | Does                                                                |
@@ -78,7 +150,7 @@ DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/finance
 | `npm run import:csv` | imports a Latitude/Gem statement; `--dry-run`                        |
 | `npm run recompute`  | rebuilds `transactions_enriched` from raw + rules. Fetches nothing.  |
 | `npm run typecheck`  | `tsc --noEmit`                                                       |
-| `npm test`           | engine, cadence, budget, dashboard and reconciliation tests. Needs `DATABASE_URL`. |
+| `npm test`           | engine, cadence, budget, dashboard, auth and reconciliation tests. Needs `DATABASE_URL`. |
 
 `npm test` deliberately fails rather than skips when `DATABASE_URL` is unset:
 the reconciliation assertions are meant to break CI, and a skipped test that
@@ -105,7 +177,13 @@ src/lib/recurring.ts             cadence detection from the gaps between charges
 src/lib/queries.ts               every SQL query the pages use
 src/lib/budget.ts                budget verdicts: on track, ahead of pace, over
 src/lib/dashboard.ts             the front page's headline figures and commentary
-src/app/                         the six pages
+src/lib/auth/ticket.ts           signed tickets: the session and both challenges
+src/lib/auth/session.ts          the APP_PASSWORD switch and the session cookie
+src/lib/auth/webauthn.ts         the two passkey ceremonies
+src/lib/auth/passkeys.ts         the passkeys table, and nothing else
+src/middleware.ts                the gate every request passes through
+src/app/(app)/                   the six pages, and the shell they render in
+src/app/login/                   the one page that renders without the shell
 docs/schema.md                   the schema and why it is shaped that way
 ```
 
@@ -206,7 +284,13 @@ npm run seed:rules && npm run backfill && npm run recompute
 Import the Flight Centre CSV separately — it is the one source nothing fetches.
 
 **2. The app.** Dockerfile build, port 3000. Set `DATABASE_URL`,
-`AKAHU_USER_TOKEN` and `AKAHU_APP_ID_TOKEN`.
+`AKAHU_USER_TOKEN`, `AKAHU_APP_ID_TOKEN` and — since this one is reachable from
+the internet — `APP_PASSWORD`. Without it every page is open to anyone with the
+URL. Set it as a runtime variable, not a build argument; it is read per request,
+and the build has no business holding it.
+
+`WEBAUTHN_RP_ID` only matters if the deployment answers on more than one
+hostname; otherwise the relying party comes from the request.
 
 Leave `PGSSLMODE` empty when Postgres shares a private network with the app,
 which is the normal Coolify setup. Set `require` only when the connection leaves
@@ -247,3 +331,8 @@ running the image, and CI now builds it on every push:
 `.env.example` is committed. `.env` is not, and neither is anything else
 matching `.env.*`. No database credential is ever exposed to the browser: the
 Next.js server is the only thing that opens a socket to Postgres.
+
+`APP_PASSWORD` never leaves the server either. It is compared against what was
+typed, and used as an HMAC key; nothing derived from it that reaches the browser
+can be run backwards into it. Nothing in `src/lib/auth/` outside the ticket
+module handles it at all.
