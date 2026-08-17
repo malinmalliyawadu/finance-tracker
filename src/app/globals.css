@@ -790,6 +790,22 @@ a.insight-body:hover .insight-headline {
   font-family: var(--font-mono), monospace;
 }
 
+/* The invested share sits above its own block and takes that block's colour, so
+   it is read as a label on the pale part rather than on the column as a whole. */
+.chart-share {
+  font-size: 10px;
+  fill: var(--capital);
+  font-family: var(--font-mono), monospace;
+  opacity: 0.9;
+  pointer-events: none;
+  /* A column that lands near the average ends up with its share sitting on the
+     dashed rule, so the label carries a thin cut-out of the card behind it. */
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
 .chart-rule {
   stroke: var(--ink-faint);
   stroke-width: 1;
@@ -945,7 +961,11 @@ tbody tr:hover td {
 
 .cat-row {
   display: grid;
-  grid-template-columns: minmax(140px, 200px) minmax(0, 1fr) 96px;
+  /* The last column carries a second line on budgeted rows ("over by $1,240"),
+     so it is sized for that rather than for the figure alone. */
+  /* Wide enough for the longest category name beside its tag, which is what
+     the "not spending" rows need before they start losing their last word. */
+  grid-template-columns: minmax(140px, 240px) minmax(0, 1fr) 112px;
   gap: 14px;
   align-items: center;
   padding: 7px 0;
@@ -1007,11 +1027,46 @@ tbody tr:hover td {
   border-radius: 1px;
 }
 
+/* Dashed, so a budget is never read as the solid average tick on the row
+   beside it: the two answer different questions. */
+.cat-limit {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  border-radius: 1px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--ink) 0 3px,
+    transparent 3px 6px
+  );
+  opacity: 0.85;
+}
+
 .cat-value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
   text-align: right;
   font-family: var(--font-mono), monospace;
   font-variant-numeric: tabular-nums;
   font-weight: 500;
+}
+
+.cat-value small {
+  font-size: 11px;
+  font-weight: 400;
+  white-space: nowrap;
+  color: var(--ink-faint);
+}
+
+.cat-value small.cat-note-alert {
+  color: var(--alert);
+}
+
+.cat-value small.cat-note-warn {
+  color: var(--warn);
 }
 
 /* ----------------------------------------------------------------- form -- */
@@ -1282,7 +1337,7 @@ tbody tr:hover td {
   }
 
   .cat-row {
-    grid-template-columns: minmax(110px, 1fr) 90px;
+    grid-template-columns: minmax(110px, 1fr) 104px;
   }
 
   .cat-track {

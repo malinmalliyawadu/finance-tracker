@@ -17,9 +17,11 @@ import {
   forecastFor,
   headlineTiles,
   insightsFor,
+  investedShare,
+  investedShareAcross,
   type Reading,
 } from '../src/lib/dashboard.ts'
-import type { Budget, BudgetLine, Sieve } from '../src/lib/queries.ts'
+import type { Budget, BudgetLine, Sieve, TrendPoint } from '../src/lib/queries.ts'
 
 function line(over: Partial<BudgetLine> & { category: string }): BudgetLine {
   return {
@@ -339,5 +341,42 @@ describe('the commentary', () => {
 
     assert.ok(found.includes('over-budget'))
     assert.ok(!found.includes('clean'), 'the reassurance and the alarm are mutually exclusive')
+  })
+})
+
+describe('the share put away rather than spent', () => {
+  const point = (living: number, nonConsumption: number): TrendPoint => ({
+    periodStart: '2026-08-01',
+    periodEnd: '2026-08-31',
+    living,
+    nonConsumption,
+    income: 0,
+  })
+
+  test('a period is measured against everything that went out, not against income', () => {
+    assert.equal(investedShare(point(7500, 2500)), 0.25)
+    assert.equal(investedShare(point(3000, 1000)), 0.25)
+  })
+
+  test('the share put away and the share spent meet at the whole', () => {
+    const share = investedShare(point(4000, 1000))!
+    assert.equal(share + (1 - share), 1)
+  })
+
+  test('a period that put nothing away is left unlabelled, not labelled zero', () => {
+    assert.equal(investedShare(point(4000, 0)), null)
+    // A period with nothing in it at all, which the current one is on day one.
+    assert.equal(investedShare(point(0, 0)), null)
+  })
+
+  test('the summary weighs periods by their size, not one vote each', () => {
+    // A big month at 10% and a small one at 50% is not a 30% habit.
+    const across = investedShareAcross([point(9000, 1000), point(500, 500)])!
+    assert.equal(Math.round(across * 100), 14)
+  })
+
+  test('nothing put away across the whole run says nothing', () => {
+    assert.equal(investedShareAcross([point(4000, 0), point(3000, 0)]), null)
+    assert.equal(investedShareAcross([]), null)
   })
 })

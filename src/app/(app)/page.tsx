@@ -105,6 +105,16 @@ export default async function DashboardPage({
 
   const previous = periods.find((p) => p.start < selected && p.hasData)
 
+  // Only categories with a limit in force for this period. The rest of the
+  // ranking keeps its average tick, so an unbudgeted category is still measured
+  // against something rather than reading as unmeasured.
+  const limits = new Map(
+    budget.budgeted.map((line) => [
+      line.categoryId,
+      { budget: line.budget ?? 0, expectedByNow: line.expectedByNow },
+    ]),
+  )
+
   return (
     <>
       <div className="page-head">
@@ -260,7 +270,9 @@ export default async function DashboardPage({
             <h2>Living costs by period</h2>
             <p>
               {periodRule(settings.statementStartDay)} The pale block above each column is
-              investing and transfers — real money, but saving rather than spending.
+              investing and transfers — real money, but saving rather than spending. The figure
+              above it is that period&rsquo;s share of everything that went out, so the rest of it
+              was spent.
             </p>
           </div>
         </div>
@@ -274,15 +286,27 @@ export default async function DashboardPage({
           <div>
             <h2>Where it went</h2>
             <p>
-              The tick on each bar is that category&rsquo;s own average per period. Select a
-              category to see the transactions behind it.
+              {budget.exists ? (
+                <>
+                  The mark on each bar is that category&rsquo;s budget where one is set, and its
+                  own average per period where none is.{' '}
+                </>
+              ) : (
+                <>The tick on each bar is that category&rsquo;s own average per period. </>
+              )}
+              Select a category to see the transactions behind it.
             </p>
           </div>
           <Link href="/categories" className="btn btn-quiet">
             All categories
           </Link>
         </div>
-        <CategoryBars totals={categories.slice(0, 10)} periodStart={selected} />
+        <CategoryBars
+          totals={categories.slice(0, 10)}
+          periodStart={selected}
+          limits={limits}
+          partial={partial}
+        />
       </section>
     </>
   )
