@@ -10,7 +10,14 @@
  * rather than buried in JSX.
  */
 
-import type { BiggestPurchase, Budget, BudgetLine, PaceComparison, Sieve } from './queries.ts'
+import type {
+  BiggestPurchase,
+  Budget,
+  BudgetLine,
+  PaceComparison,
+  Sieve,
+  TrendPoint,
+} from './queries.ts'
 import { project } from './budget.ts'
 // Whole dollars throughout: this is prose, and cents in a sentence read as
 // precision that the claim around them does not have.
@@ -435,4 +442,38 @@ export function insightsFor(reading: Reading): Insight[] {
   }
 
   return found.sort((a, b) => b.weight - a.weight).slice(0, MAX_INSIGHTS)
+}
+
+// ---------------------------------------------------------------------------
+// Trend
+// ---------------------------------------------------------------------------
+
+/**
+ * The share of everything that left in a period which was put away rather than
+ * spent, or null when there is no share to take.
+ *
+ * Investing and transfers are already drawn above living costs in the trend
+ * chart, but a block's height only answers "how much"; this is the question
+ * underneath it, and the one a column twice as tall as its neighbour makes
+ * impossible to eyeball. The denominator is everything that went out, so the
+ * complement is the share that was spent and the two always meet at 100%.
+ *
+ * Null rather than zero when nothing was put away: a "0%" over a column with no
+ * pale block on it is a label for something that is not there.
+ */
+export function investedShare(point: TrendPoint): number | null {
+  const out = point.living + point.nonConsumption
+  if (out <= 0 || point.nonConsumption <= 0) return null
+  return point.nonConsumption / out
+}
+
+/**
+ * The same reading across every period shown, for the one-line summary a reader
+ * who cannot see the columns is given instead of them.
+ */
+export function investedShareAcross(points: TrendPoint[]): number | null {
+  const out = points.reduce((sum, p) => sum + p.living + p.nonConsumption, 0)
+  const capital = points.reduce((sum, p) => sum + p.nonConsumption, 0)
+  if (out <= 0 || capital <= 0) return null
+  return capital / out
 }
