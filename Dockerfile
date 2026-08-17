@@ -1,8 +1,10 @@
 # Self-hosted image for Coolify. Next.js standalone output, so the runtime
 # layer carries only the traced dependencies rather than a full node_modules.
 #
-# Note: the build downloads and self-hosts the three Google fonts via
-# next/font, so the builder needs network access. The runtime does not.
+# Note: the only network the builder needs is the registry for `npm ci`. The
+# fonts are committed under src/fonts and loaded with next/font/local, so
+# nothing reaches out to fonts.gstatic.com mid-build. The runtime needs no
+# network beyond the database and Akahu.
 
 FROM node:24-alpine AS deps
 WORKDIR /app
@@ -14,7 +16,13 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+
+# `--network=none` is a guard, not an optimisation. A production deploy once
+# failed because next/font/google fetches its files during `next build` and
+# fonts.gstatic.com was unreachable from the builder. The fonts are committed
+# now (src/fonts), and this line means any future build-time fetch fails here,
+# in a build anyone can run, rather than intermittently on the deploy server.
+RUN --network=none npm run build
 
 FROM node:24-alpine AS runner
 WORKDIR /app
