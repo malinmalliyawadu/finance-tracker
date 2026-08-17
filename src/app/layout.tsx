@@ -1,25 +1,40 @@
 import type { Metadata } from 'next'
-import { Bricolage_Grotesque, IBM_Plex_Mono, Public_Sans } from 'next/font/google'
+import localFont from 'next/font/local'
 
 import './globals.css'
 
-const display = Bricolage_Grotesque({
-  subsets: ['latin'],
-  weight: ['600', '700'],
+/**
+ * The three families are committed to `src/fonts` rather than fetched from
+ * Google at build time. `next/font/google` downloads the files during the
+ * build, which made every production build depend on fonts.gstatic.com being
+ * reachable from inside the Docker builder — and when it was not, the build
+ * failed outright rather than degrading to a fallback face. See
+ * `src/fonts/README.md` for what each file is and how to refresh it.
+ */
+const display = localFont({
+  src: '../fonts/bricolage-grotesque-latin-600-700.woff2',
+  weight: '600 700',
+  style: 'normal',
   variable: '--font-display',
   display: 'swap',
 })
 
-const body = Public_Sans({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
+const body = localFont({
+  src: '../fonts/public-sans-latin-400-700.woff2',
+  weight: '400 700',
+  style: 'normal',
   variable: '--font-body',
   display: 'swap',
 })
 
-const mono = IBM_Plex_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
+// IBM Plex Mono has no variable cut on Google Fonts, so it is three static
+// weights rather than one range.
+const mono = localFont({
+  src: [
+    { path: '../fonts/ibm-plex-mono-latin-400.woff2', weight: '400', style: 'normal' },
+    { path: '../fonts/ibm-plex-mono-latin-500.woff2', weight: '500', style: 'normal' },
+    { path: '../fonts/ibm-plex-mono-latin-600.woff2', weight: '600', style: 'normal' },
+  ],
   variable: '--font-mono',
   display: 'swap',
 })
