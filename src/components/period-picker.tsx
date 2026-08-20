@@ -1,5 +1,6 @@
 import Link from 'next/link'
 
+import { PeriodScroller } from './period-scroller.tsx'
 import type { Period } from '../lib/queries.ts'
 import { monthShort, periodLabel, toDate } from '../lib/format.ts'
 
@@ -27,7 +28,7 @@ export function PeriodPicker({
       <div className="eyebrow" style={{ marginBottom: 6, textAlign: 'right' }}>
         {active ? periodLabel(active.start, active.end) : 'All periods'}
       </div>
-      <div className="periods" role="group" aria-label="Statement period">
+      <PeriodScroller>
         {allowAll && (
           <Link
             href={basePath}
@@ -48,7 +49,7 @@ export function PeriodPicker({
             {chipLabel(period, i === 0)}
           </Link>
         ))}
-      </div>
+      </PeriodScroller>
     </div>
   )
 }
