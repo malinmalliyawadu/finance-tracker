@@ -6,27 +6,32 @@ import { monthShort, periodLabel, toDate } from '../lib/format.ts'
 /**
  * Statement periods run the 16th to the 15th, not calendar months, so the
  * period is never left implicit — it is named in full above the picker and
- * every chip is labelled by the month it opens in.
+ * every chip is labelled by the month it opens in. Pages whose own heading is
+ * the period turn that label off rather than print it twice.
  */
 export function PeriodPicker({
   periods,
   selected,
   basePath,
   allowAll = false,
+  showLabel = true,
 }: {
   periods: Period[]
   selected: string | null
   basePath: string
   allowAll?: boolean
+  showLabel?: boolean
 }) {
   const shown = periods.slice(0, 13).reverse()
   const active = periods.find((p) => p.start === selected)
 
   return (
     <div className="period-picker">
-      <div className="eyebrow" style={{ marginBottom: 6, textAlign: 'right' }}>
-        {active ? periodLabel(active.start, active.end) : 'All periods'}
-      </div>
+      {showLabel && (
+        <div className="eyebrow" style={{ marginBottom: 6, textAlign: 'right' }}>
+          {active ? periodLabel(active.start, active.end) : 'All periods'}
+        </div>
+      )}
       <div className="periods" role="group" aria-label="Statement period">
         {allowAll && (
           <Link

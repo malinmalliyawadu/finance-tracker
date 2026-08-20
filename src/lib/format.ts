@@ -51,6 +51,7 @@ const calendarFormat = (options: Intl.DateTimeFormatOptions) =>
 const DAY_MONTH = calendarFormat({ day: 'numeric', month: 'short' })
 const DAY_MONTH_YEAR = calendarFormat({ day: 'numeric', month: 'short', year: 'numeric' })
 const MONTH_SHORT = calendarFormat({ month: 'short' })
+const WEEKDAY_DAY_MONTH = calendarFormat({ weekday: 'short', day: 'numeric', month: 'short' })
 
 /** A real point in time, in New Zealand: "16/08/2026, 9:04 am". */
 const NZ_DATE_TIME = new Intl.DateTimeFormat('en-NZ', {
@@ -61,6 +62,11 @@ const NZ_DATE_TIME = new Intl.DateTimeFormat('en-NZ', {
 
 export function shortDate(value: Date | string): string {
   return DAY_MONTH.format(toDate(value))
+}
+
+/** "Wed 19 Aug", for a feed of days where the weekday is half the meaning. */
+export function weekdayDate(value: Date | string): string {
+  return WEEKDAY_DAY_MONTH.format(toDate(value))
 }
 
 export function fullDate(value: Date | string): string {

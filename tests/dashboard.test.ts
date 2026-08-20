@@ -14,14 +14,15 @@ import { describe, test } from 'node:test'
 import { project } from '../src/lib/budget.ts'
 import {
   comparisonFor,
+  flowsFor,
   forecastFor,
-  headlineTiles,
+  headlineFor,
   insightsFor,
-  investedShare,
-  investedShareAcross,
+  pressureFor,
+  tapeFor,
   type Reading,
 } from '../src/lib/dashboard.ts'
-import type { Budget, BudgetLine, Sieve, TrendPoint } from '../src/lib/queries.ts'
+import type { Budget, BudgetLine, Day, Sieve } from '../src/lib/queries.ts'
 
 function line(over: Partial<BudgetLine> & { category: string }): BudgetLine {
   return {
@@ -54,12 +55,25 @@ function budgetOf(lines: BudgetLine[]): Budget {
   }
 }
 
-function sieveOf(living: number, unclassified = 0): Sieve {
+function sieveOf(
+  living: number,
+  unclassified = 0,
+  flows: { income?: number; putAway?: number } = {},
+): Sieve {
+  const putAway = flows.putAway ?? 0
+
   return {
-    bands: [],
-    totalOut: living,
+    bands: [
+      {
+        key: 'non_consumption',
+        label: 'Investing and transfers',
+        because: 'Real outflows, but saving rather than spending.',
+        amount: putAway,
+      },
+    ],
+    totalOut: living + putAway,
     living,
-    income: 0,
+    income: flows.income ?? 0,
     passthroughRetained: 0,
     unclassified,
   }
@@ -73,7 +87,12 @@ function reading(over: Partial<Reading> = {}): Reading {
     totalDays: 31,
     sieve: sieveOf(1000),
     budget: budgetOf([]),
-    pace: { average: 1000, wholeAverage: 2000, periods: 6 },
+    pace: {
+      periods: 6,
+      spent: { toDate: 1000, whole: 2000 },
+      earned: { toDate: 3000, whole: 6000 },
+      putAway: { toDate: 400, whole: 800 },
+    },
     wholePeriodAverage: 2000,
     biggest: null,
     ...over,
@@ -125,60 +144,197 @@ describe('projecting a part-finished period', () => {
   })
 })
 
-describe('the headline tiles', () => {
+describe('the headline', () => {
   test('a part-finished period leads with what is left and where it lands', () => {
     const budget = budgetOf([
       line({ category: 'Groceries', budget: 600, spent: 200, expectedByNow: 300 }),
     ])
-    const tiles = headlineTiles(reading({ budget }))
+    const headline = headlineFor(reading({ budget }))
 
-    assert.deepEqual(
-      tiles.map((t) => t.key),
-      ['living', 'remaining', 'pace'],
-    )
-    assert.equal(tiles[1]!.label, 'Left in the budget')
-    assert.equal(tiles[1]!.value, 400)
+    assert.equal(headline.label, 'Left to spend')
+    assert.equal(headline.value, 400)
+    assert.equal(headline.tone, 'living')
+    assert.match(headline.verdict, /inside the budget/)
   })
 
   test('being over the limit is never drawn in the reassuring colour', () => {
     const budget = budgetOf([
       line({ category: 'Groceries', budget: 600, spent: 900, expectedByNow: 300 }),
     ])
-    const tiles = headlineTiles(reading({ budget }))
+    const headline = headlineFor(reading({ budget }))
 
-    assert.equal(tiles[1]!.label, 'Over the budget')
-    assert.equal(tiles[1]!.tone, 'alert')
-    assert.equal(tiles[1]!.value, 300, 'the overspend is shown, not a negative remainder')
+    assert.equal(headline.label, 'Over the budget')
+    assert.equal(headline.tone, 'alert')
+    assert.equal(headline.value, 300, 'the overspend is shown, not a negative remainder')
+    assert.equal(headline.verdictTone, 'alert')
   })
 
-  test('too early to forecast falls back to what the budget allows by today', () => {
+  test('heading past the limit is a warning while there is still time to act', () => {
+    // Half the budget gone against a quarter of it due: inside the limit today,
+    // and nowhere near inside it by the end.
+    const budget = budgetOf([
+      line({ category: 'Groceries', budget: 600, spent: 300, expectedByNow: 150 }),
+    ])
+    const headline = headlineFor(reading({ budget }))
+
+    assert.equal(headline.label, 'Left to spend', 'still inside the limit')
+    assert.equal(headline.verdictTone, 'warn')
+    assert.match(headline.verdict, /ends \$600 over/)
+    assert.match(headline.verdict, /a day for the last 15 days/, 'says what to do about it')
+  })
+
+  test('too early to forecast says so rather than inventing a number', () => {
     const budget = budgetOf([
       line({ category: 'Groceries', budget: 600, spent: 30, expectedByNow: 24 }),
     ])
-    const tiles = headlineTiles(reading({ elapsedDays: 2, budget }))
+    const headline = headlineFor(reading({ elapsedDays: 2, budget }))
 
-    assert.equal(tiles[2]!.key, 'expected')
-    assert.equal(tiles[2]!.value, 24)
+    assert.equal(headline.verdictTone, 'neutral')
+    assert.match(headline.verdict, /Too early to call/)
+    assert.match(headline.verdict, /\$24 by day 2/)
   })
 
-  test('no budget leaves the one figure that does not depend on having one', () => {
-    assert.deepEqual(
-      headlineTiles(reading()).map((t) => t.key),
-      ['living'],
-    )
+  test('with no budget the headline falls back to what has been spent', () => {
+    const headline = headlineFor(reading())
+
+    assert.equal(headline.label, 'Spent so far')
+    assert.equal(headline.value, 1000)
+    assert.equal(headline.href, '/budget')
+  })
+
+  test('a closed period reports where it finished, not where it is heading', () => {
+    const budget = budgetOf([
+      line({ category: 'Groceries', budget: 600, spent: 500, expectedByNow: 600 }),
+    ])
+    const headline = headlineFor(reading({ partial: false, pace: null, budget }))
+
+    assert.equal(headline.label, 'Left in the budget')
+    assert.match(headline.verdict, /finished \$100 inside its budget/)
   })
 
   test('a closed period is compared against whole periods, not against a day', () => {
     const closed = reading({ partial: false, pace: null, sieve: sieveOf(2400) })
     assert.equal(comparisonFor(closed).label, 'vs 12-period average')
-
-    const tile = headlineTiles(closed)[0]!
-    assert.equal(tile.delta?.over, true)
-    assert.equal(tile.delta?.text, '20% vs 12-period average')
+    assert.match(headlineFor(closed).verdict, /\$400 above the 12-period average/)
   })
 
   test('a part-finished period is compared against the same day of prior ones', () => {
     assert.equal(comparisonFor(reading()).label, 'vs average by day 16')
+  })
+})
+
+describe('money in, spent and put away', () => {
+  const flowing = reading({ sieve: sieveOf(1200, 0, { income: 2400, putAway: 500 }) })
+
+  test('all three are read against the same day of prior periods', () => {
+    const flows = flowsFor(flowing)
+
+    assert.deepEqual(
+      flows.map((f) => [f.key, f.value]),
+      [
+        ['earned', 2400],
+        ['spent', 1200],
+        ['putAway', 500],
+      ],
+    )
+    assert.equal(flows[0]!.delta?.direction, 'below', '$2,400 against a usual $3,000 by now')
+    assert.equal(flows[1]!.delta?.direction, 'above', '$1,200 against a usual $1,000 by now')
+  })
+
+  test('only spending is ever flagged', () => {
+    const flows = flowsFor(flowing)
+
+    assert.equal(flows[1]!.delta?.alarming, true, 'spending 20% above usual is worth flagging')
+    assert.equal(
+      flows[0]!.delta?.alarming,
+      false,
+      'a quiet fortnight before payday is not bad news',
+    )
+    assert.equal(flows[2]!.delta?.alarming, false)
+  })
+
+  test('a few percent either way is not a signal', () => {
+    // One weekly shop landing on the wrong side of today moves a figure by
+    // more than this.
+    const level = flowsFor(reading({ sieve: sieveOf(1040, 0, { income: 3000 }) }))
+    assert.equal(level[1]!.delta?.direction, 'level')
+    assert.match(level[1]!.delta!.text, /about usual/)
+  })
+
+  test('nothing to compare against is left uncompared, not compared with zero', () => {
+    const fresh = flowsFor(reading({ pace: null }))
+    assert.deepEqual(
+      fresh.map((f) => f.delta),
+      [null, null, null],
+    )
+  })
+})
+
+describe('the budgets under pressure', () => {
+  test('ranked by how far past its own pace a category is, not by what it costs', () => {
+    const budget = budgetOf([
+      // The largest line on the page, and behaving perfectly.
+      line({ category: 'Mortgage', budget: 3000, spent: 1500, expectedByNow: 1500 }),
+      line({ category: 'Eating out', budget: 300, spent: 240, expectedByNow: 150 }),
+      line({ category: 'Groceries', budget: 800, spent: 500, expectedByNow: 400 }),
+    ])
+
+    assert.deepEqual(
+      pressureFor(budget, true).map((row) => row.line.category),
+      ['Eating out', 'Groceries'],
+      'the mortgage is the biggest number and the one nobody can act on',
+    )
+  })
+
+  test('past the limit outranks merely running fast', () => {
+    const budget = budgetOf([
+      // Twice its pace, but still inside the limit.
+      line({ category: 'Eating out', budget: 900, spent: 400, expectedByNow: 200 }),
+      line({ category: 'Groceries', budget: 400, spent: 420, expectedByNow: 390 }),
+    ])
+
+    assert.equal(pressureFor(budget, true)[0]!.line.category, 'Groceries')
+  })
+
+  test('a budget behaving itself keeps the list short', () => {
+    const budget = budgetOf([
+      line({ category: 'Groceries', budget: 800, spent: 300, expectedByNow: 400 }),
+    ])
+
+    assert.deepEqual(pressureFor(budget, true), [])
+  })
+})
+
+describe('the period, day by day', () => {
+  const days = (spends: number[]): Day[] =>
+    spends.map((spent, index) => ({
+      date: `2026-08-${String(index + 1).padStart(2, '0')}`,
+      day: index + 1,
+      spent,
+      isWeekend: false,
+      isFuture: index >= spends.filter((s) => s >= 0).length,
+    }))
+
+  test('what is left is spread over the days that are left, not the whole period', () => {
+    const budget = budgetOf([
+      line({ category: 'Groceries', budget: 3000, spent: 1500, expectedByNow: 1500 }),
+    ])
+    const tape = tapeFor(reading({ budget }), days([100, 200, 300]))
+
+    assert.equal(tape.daysLeft, 15)
+    assert.equal(tape.allowancePerDay, 100, '$1,500 left across the 15 days remaining')
+    assert.equal(tape.peak, 300)
+  })
+
+  test('an overspent budget leaves no allowance to draw', () => {
+    const budget = budgetOf([
+      line({ category: 'Groceries', budget: 1000, spent: 1200, expectedByNow: 800 }),
+    ])
+    assert.equal(tapeFor(reading({ budget }), days([100])).allowancePerDay, null)
+  })
+
+  test('without a budget there is nothing to divide', () => {
+    assert.equal(tapeFor(reading(), days([100])).allowancePerDay, null)
   })
 })
 
@@ -313,8 +469,9 @@ describe('the commentary', () => {
     assert.ok(!keys(reading({ budget, biggest })).includes('biggest'))
   })
 
-  test('a period with no budget is asked for one exactly once', () => {
-    assert.deepEqual(keys(reading()), ['no-budget'])
+  test('a period with no budget is asked for one by the headline, not twice', () => {
+    assert.deepEqual(keys(reading()), [], 'the commentary leaves the ask to the headline')
+    assert.equal(headlineFor(reading()).href, '/budget')
   })
 
   test('the list is capped, so the worst things are the ones that survive', () => {
@@ -341,42 +498,5 @@ describe('the commentary', () => {
 
     assert.ok(found.includes('over-budget'))
     assert.ok(!found.includes('clean'), 'the reassurance and the alarm are mutually exclusive')
-  })
-})
-
-describe('the share put away rather than spent', () => {
-  const point = (living: number, nonConsumption: number): TrendPoint => ({
-    periodStart: '2026-08-01',
-    periodEnd: '2026-08-31',
-    living,
-    nonConsumption,
-    income: 0,
-  })
-
-  test('a period is measured against everything that went out, not against income', () => {
-    assert.equal(investedShare(point(7500, 2500)), 0.25)
-    assert.equal(investedShare(point(3000, 1000)), 0.25)
-  })
-
-  test('the share put away and the share spent meet at the whole', () => {
-    const share = investedShare(point(4000, 1000))!
-    assert.equal(share + (1 - share), 1)
-  })
-
-  test('a period that put nothing away is left unlabelled, not labelled zero', () => {
-    assert.equal(investedShare(point(4000, 0)), null)
-    // A period with nothing in it at all, which the current one is on day one.
-    assert.equal(investedShare(point(0, 0)), null)
-  })
-
-  test('the summary weighs periods by their size, not one vote each', () => {
-    // A big month at 10% and a small one at 50% is not a 30% habit.
-    const across = investedShareAcross([point(9000, 1000), point(500, 500)])!
-    assert.equal(Math.round(across * 100), 14)
-  })
-
-  test('nothing put away across the whole run says nothing', () => {
-    assert.equal(investedShareAcross([point(4000, 0), point(3000, 0)]), null)
-    assert.equal(investedShareAcross([]), null)
   })
 })
