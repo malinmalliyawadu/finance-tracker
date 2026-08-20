@@ -150,6 +150,7 @@ not.
 | `npm run import:csv` | imports a Latitude/Gem statement; `--dry-run`                        |
 | `npm run recompute`  | rebuilds `transactions_enriched` from raw + rules. Fetches nothing.  |
 | `npm run typecheck`  | `tsc --noEmit`                                                       |
+| `npm run icons`      | redraws `public/icons` from `scripts/make-icons.ts`. Rarely.         |
 | `npm test`           | engine, cadence, budget, dashboard, auth and reconciliation tests. Needs `DATABASE_URL`. |
 
 `npm test` deliberately fails rather than skips when `DATABASE_URL` is unset:
@@ -172,6 +173,8 @@ scripts/migrate.ts               ~60-line migration runner, no dependency
 scripts/seed-rules.ts            idempotent loader for categories/rules/aliases
 scripts/seed-demo.ts             synthetic transactions for development
 scripts/recompute.ts             rebuilds the derived layer
+scripts/make-icons.ts            draws public/icons; run by hand, output checked in
+public/manifest.webmanifest      what makes the home-screen install a real app
 src/lib/categorise.ts            the engine: rules in, verdict out. Pure.
 src/lib/recurring.ts             cadence detection from the gaps between charges
 src/lib/queries.ts               every SQL query the pages use
@@ -263,6 +266,32 @@ Both the figures and the sentences are pure functions over data the page has
 already fetched, so `tests/dashboard.test.ts` pins down what the app is willing
 to assert about someone's money without needing a database.
 
+## On a phone
+
+The app is meant to be installed to a home screen, so it ships a manifest, a
+set of icons and a `standalone` display mode: launched from the tile it opens
+without browser chrome, under its own name, on its own theme colour.
+
+Below 760px the nav rail stops being a rail. Its seven links used to become a
+row that scrolled sideways, which hid the last two behind an edge with nothing
+to say they were there — so the five links worth having under a thumb move to a
+fixed tab bar at the bottom of the screen, and Large purchases, Accounts and
+sign-out become icons in the top bar. Both navs read from one list in
+`src/components/rail.tsx`; there is nothing to keep in sync.
+
+The rest is the usual phone tax, and each piece is commented where it lives:
+`dvh` instead of `vh`, `env(safe-area-inset-*)` under the tab bar and over the
+top bar, 16px text fields so iOS does not zoom the page in on focus and leave
+it there, and one column dropped from the transactions table — the account,
+which is the least-asked question on that page — before it starts to scroll.
+
+`public/icons` is checked in and drawn by `npm run icons`, for the same reason
+`src/fonts` is checked in: a production build should not have to generate
+anything it can be handed. The manifest and the icons are also excluded from
+the gate in `src/middleware.ts`, because they are fetched to install the app —
+sometimes by the OS, without the session cookie — and a gated manifest installs
+the login page under the wrong name with a screenshot for an icon.
+
 ## The daily sync
 
 `scripts/sync.ts` is a CLI, not an HTTP endpoint. Nothing public triggers it,
@@ -340,6 +369,10 @@ running the image, and CI now builds it on every push:
 - Next's standalone output bundles `postgres` into the server chunks rather than
   leaving it in `node_modules`, so every script in the image failed to resolve
   it. The Dockerfile copies that one package back in.
+- Standalone traces imports, and nothing imports `public/` — the manifest and
+  the icons are only ever named in a `<link>`. The Dockerfile copies that
+  directory in too. Left out, the app serves perfectly and the only symptom is
+  that installing it to a home screen gets the wrong name and no icon.
 
 ## Secrets
 

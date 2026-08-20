@@ -122,6 +122,31 @@ select {
   color: inherit;
 }
 
+/* Safari paints a grey block over anything tappable for the length of the tap.
+   On a page of small controls it reads as a rendering fault; every control here
+   already has a :hover and an [aria-current] state to say the same thing. */
+a,
+button,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* iOS zooms the whole page in when a text field smaller than 16px takes focus,
+   and does not zoom back out afterwards — so one tap on the transactions search
+   leaves every page scaled up until you pinch it back by hand. 16px is the
+   threshold, not a design choice; above the phone breakpoint the fields go back
+   to matching the body. */
+@media (max-width: 760px) {
+  input[type='text'],
+  input[type='search'],
+  input[type='password'],
+  input[type='number'],
+  input:not([type]),
+  textarea {
+    font-size: 16px;
+  }
+}
+
 :focus-visible {
   outline: 2px solid var(--income);
   outline-offset: 2px;
@@ -158,14 +183,21 @@ select {
 .shell {
   display: grid;
   grid-template-columns: 232px minmax(0, 1fr);
-  min-height: 100vh;
+  /* dvh, not vh: on iOS `100vh` is the height the viewport has with the browser
+     chrome retracted, so at rest every page is a chrome's-worth taller than the
+     screen and the document scrolls when it has nothing to scroll. */
+  min-height: 100dvh;
 }
 
 .rail {
   position: sticky;
   top: 0;
   align-self: start;
-  height: 100vh;
+  height: 100dvh;
+  /* A phone held sideways is above the breakpoint but only ~390px tall, which
+     is shorter than nine links plus the foot. The rail scrolls itself rather
+     than spilling out of a pane that is pinned to the viewport's height. */
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -179,6 +211,7 @@ select {
   align-items: baseline;
   gap: 8px;
   padding: 0 8px;
+  text-decoration: none;
 }
 
 .rail-brand strong {
@@ -200,11 +233,24 @@ select {
   gap: 1px;
 }
 
+/* One drawing per section, shared by the rail and the phone's tab bar. Stroked
+   rather than filled so a single set reads at both 18px and 21px, and so the
+   colour comes from `currentColor` and follows whatever state the link is in. */
+.rail-icon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .rail-link {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 9px;
   padding: 8px 10px;
   border-radius: var(--radius);
   text-decoration: none;
@@ -225,9 +271,40 @@ select {
 }
 
 .rail-link small {
+  margin-left: auto;
   font-family: var(--font-mono), monospace;
   font-size: 11px;
   color: var(--ink-faint);
+}
+
+/* Only ever visible in the phone top bar, where the rail's list is hidden and
+   the tab bar below has no room for these. */
+.rail-quick {
+  display: none;
+}
+
+.rail-quick-link {
+  display: grid;
+  place-items: center;
+  /* 40px is the floor for anything a thumb has to hit; the icon inside is 18px
+     and the rest is target. */
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius);
+  color: var(--ink-muted);
+  background: var(--surface-sunk);
+  text-decoration: none;
+}
+
+button.rail-quick-link {
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.rail-quick-link[aria-current='page'] {
+  background: var(--living-soft);
+  color: var(--living);
 }
 
 /* Everything that sits below the links, pushed down as one block. The foot is
@@ -260,6 +337,12 @@ select {
   display: flex;
   flex-direction: column;
   gap: 28px;
+}
+
+/* The thumb row, which only exists below the rail's breakpoint. It is in the
+   markup at every width so there is one nav to keep correct rather than two. */
+.tabbar {
+  display: none;
 }
 
 .page-head {
@@ -1611,6 +1694,10 @@ tbody tr:hover td {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  /* The rail keeps the brand and two icons and gives up the list, which has
+     moved to the tab bar. It stays put rather than sticking: a phone screen is
+     mostly height, and spending a strip of it on a header that is already
+     duplicated by the tabs is the wrong trade. */
   .rail {
     position: static;
     height: auto;
@@ -1619,32 +1706,83 @@ tbody tr:hover td {
     gap: 12px;
     border-right: 0;
     border-bottom: 1px solid var(--line);
-    padding: 12px var(--gutter);
+    /* Zero in a standalone launch, where iOS has already placed the web view
+       below the status bar. It earns its keep in Safari held sideways, where
+       viewport-fit: cover runs the page under the notch. */
+    padding: calc(12px + env(safe-area-inset-top)) var(--gutter) 12px;
   }
 
-  /* The links scroll, not the whole bar. When the bar itself scrolled, sign out
-     sat past the right-hand edge of eight nav links and there was no sign it
-     was there at all. */
-  .rail-nav {
-    flex-direction: row;
-    gap: 4px;
-    flex: 1;
-    min-width: 0;
-    overflow-x: auto;
-  }
-
-  .rail-brand,
+  .rail-nav,
   .rail-bottom {
-    flex-shrink: 0;
-  }
-
-  .rail-bottom {
-    margin-top: 0;
-  }
-
-  .rail-link small,
-  .rail-foot {
     display: none;
+  }
+
+  .rail-quick {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+  }
+
+  /* Room for the tab bar, which is fixed and therefore out of flow: without
+     this the last card on every page sits under it. */
+  .main {
+    padding: 20px var(--gutter) calc(84px + env(safe-area-inset-bottom));
+    gap: 22px;
+  }
+
+  .tabbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 2px;
+    padding: 7px 6px calc(7px + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    /* Unprefixed only lands in Safari 18; the phones this is for are older than
+       that, and without the prefix they get the 92% wash with nothing behind it
+       and rows read straight through the bar. */
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    border-top: 1px solid var(--line);
+  }
+
+  .tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    /* 44px of target before the safe-area padding is added underneath. */
+    min-height: 44px;
+    padding: 5px 2px;
+    border-radius: var(--radius);
+    text-decoration: none;
+    color: var(--ink-faint);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    /* "Transactions" is the longest label and it fits a fifth of a 375px screen
+       at this size with a little to spare. Wrapping it to a second line would
+       make one tab taller than the other four, so it is held on one line. */
+    white-space: nowrap;
+  }
+
+  .tab[aria-current='page'] {
+    color: var(--living);
+    background: var(--living-soft);
+  }
+
+  .tab .rail-icon {
+    width: 21px;
+    height: 21px;
+  }
+
+  .page-head {
+    align-items: flex-start;
   }
 
   .cat-row {
@@ -1653,6 +1791,57 @@ tbody tr:hover td {
 
   .cat-track {
     display: none;
+  }
+
+  /* The strip is scrolled by thumb here rather than clicked by cursor, so the
+     chips grow to a real target and the scrollbar that would sit under them
+     goes away — iOS overlays its own. */
+  .periods {
+    scrollbar-width: none;
+  }
+
+  .periods::-webkit-scrollbar {
+    display: none;
+  }
+
+  .period-chip {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  /* One field per line and the full width of it. At 240px the search box plus
+     its label overflowed a 375px screen, which put a second horizontal scroll
+     on the page — inside a toolbar that has no business scrolling. */
+  .toolbar {
+    gap: 6px;
+  }
+
+  .toolbar .field {
+    width: 100%;
+  }
+
+  .field input {
+    width: 100%;
+  }
+
+  /* Five columns do not fit a phone, so the table scrolls sideways — but it
+     should have to carry as little as possible before it does. Which account a
+     transaction came from is the least-asked question on the page and the only
+     column whose value is repeated down every row of a statement. */
+  .col-account {
+    display: none;
+  }
+
+  tbody td,
+  thead th {
+    padding: 9px 10px;
+  }
+
+  /* The category select is the one control in the table meant to be tapped, so
+     it gets the height even though the cells around it are tightening. */
+  .recat {
+    min-height: 34px;
+    max-width: 150px;
   }
 }
 
@@ -1869,11 +2058,14 @@ tbody tr:hover td {
 /* The login page renders outside the shell, so it brings its own centring
    rather than living inside .main. */
 .signin {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 40px var(--gutter);
+  /* The one page with no rail above the content to absorb the insets, and no
+     tab bar below to absorb them either. */
+  padding: calc(40px + env(safe-area-inset-top)) var(--gutter)
+    calc(40px + env(safe-area-inset-bottom));
 }
 
 .signin-card {

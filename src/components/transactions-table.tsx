@@ -46,7 +46,11 @@ export function TransactionsTable({
           <tr>
             <th style={{ width: showYear ? 104 : 76 }}>Date</th>
             <th>Description</th>
-            {showAccount && <th style={{ width: 150 }}>Account</th>}
+            {showAccount && (
+              <th className="col-account" style={{ width: 150 }}>
+                Account
+              </th>
+            )}
             <th style={{ width: 210 }}>Category</th>
             <th className="col-amount" style={{ width: 120 }}>
               Amount
@@ -107,7 +111,11 @@ function Row({
         </span>
       </td>
 
-      {showAccount && <td style={{ color: 'var(--ink-muted)', fontSize: 12 }}>{row.account}</td>}
+      {showAccount && (
+        <td className="col-account" style={{ color: 'var(--ink-muted)', fontSize: 12 }}>
+          {row.account}
+        </td>
+      )}
 
       <td>
         {/* Deliberately not a form. React resets an uncontrolled form after a

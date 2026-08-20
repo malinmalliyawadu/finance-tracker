@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import localFont from 'next/font/local'
 
 import './globals.css'
@@ -42,6 +42,43 @@ const mono = localFont({
 export const metadata: Metadata = {
   title: 'Ledger',
   description: 'What I actually spend, after the money that only looks like spending.',
+  applicationName: 'Ledger',
+  manifest: '/manifest.webmanifest',
+  icons: {
+    icon: [
+      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [{ url: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
+  },
+  appleWebApp: {
+    capable: true,
+    title: 'Ledger',
+    // Not `black-translucent`, which is the one that gets reached for to make a
+    // web app look edge-to-edge: it draws the status bar over the page in white
+    // text, and this app's ground is `--paper`, so in light mode the clock and
+    // the battery would be white on near-white. `default` keeps the page below
+    // the status bar and lets iOS fill that strip from `themeColor`, which
+    // already tracks the two grounds.
+    statusBarStyle: 'default',
+  },
+  // A home-screen launch is not a browser tab: there is no address bar to select
+  // from, so a phone number or a date read as a tappable link is a mis-tap
+  // waiting to happen on a screen that is mostly figures.
+  formatDetection: { telephone: false, date: false, address: false },
+}
+
+export const viewport: Viewport = {
+  // `cover` is what makes env(safe-area-inset-*) report real numbers; without it
+  // iOS letterboxes the page inside the safe area and the tab bar floats above
+  // the home indicator with a band of background under it.
+  viewportFit: 'cover',
+  // Left installable rather than pinned: the chrome around a standalone window
+  // is painted from these, so they follow the page's own two grounds.
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f7f9f5' },
+    { media: '(prefers-color-scheme: dark)', color: '#0f1411' },
+  ],
 }
 
 /**
