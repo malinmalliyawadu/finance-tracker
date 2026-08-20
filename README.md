@@ -230,9 +230,24 @@ written per period.
 
 ## The dashboard
 
-The front page opens on three figures — living costs so far, what the budget has
-left, and where this pace lands by the end of the period — followed by a short
-list of what is worth saying about the period, and only then by the detail.
+The front page opens on one figure - what the budget has left - and the sentence
+that reads it, beside the period drawn as its days. Then what came in, what was
+spent and what was put away, each measured against the same point in previous
+periods. Then a short list of what is worth saying about the period, and only
+then the detail: the budgets running past their pace, what has come through in
+the last few days, and every period as what went out against what came in.
+
+The day tape is deliberate. A running total answers "how much" and hides "when",
+and thirty even days and one expensive Saturday are not the same month. Days
+that have happened are solid columns of what they cost; days still to come are
+hollow ones at whatever the budget leaves per remaining day, drawn at the same
+scale, so "can I keep doing what I have been doing" is answered by looking
+rather than by dividing.
+
+Comparing against the same day of prior periods matters most for income, not
+least. Pay arrives in one or two lumps near the end of a period, so on day
+twenty "earned" is not a small number - it is a number that has not happened
+yet, and only the same day of previous periods can tell the two apart.
 
 The forecast is not a straight-line pro-rate. It scales what has been spent by
 how much of a *normal* period is already behind us, taken from history: for the

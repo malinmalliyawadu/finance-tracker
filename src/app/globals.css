@@ -445,6 +445,12 @@ button.rail-quick-link {
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 }
 
+/* Two lists of unrelated lengths. Stretched to match, the shorter one carries a
+   hole where its content ran out, which reads as something failing to load. */
+.grid-top {
+  align-items: start;
+}
+
 /* ---------------------------------------------------------------- sieve -- */
 
 .sieve {
@@ -629,161 +635,494 @@ button.rail-quick-link {
   font-weight: 500;
 }
 
-/* ------------------------------------------------------- headline tiles -- */
+/* ------------------------------------------------------------ dashboard -- */
 
-.tiles {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));
+/* The page head answers "when am I looking at" before anything answers "how
+   much". A daily reader needs the sync time as much as the figures: a dashboard
+   quoting yesterday's data without saying so is worse than an empty one. */
+.today {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
 }
 
-.tile {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 16px 18px;
+.today h1 {
+  margin-top: 5px;
+  font-size: clamp(24px, 3.4vw, 34px);
+}
+
+.today-meta {
+  margin-top: 7px;
+  font-size: 12.5px;
+  color: var(--ink-muted);
+}
+
+/* ----------------------------------------------------------------- hero -- */
+
+/* One figure, the days it was spent over, and the sentence that reads them.
+   The whole point of the page is that these three are looked at together, so
+   they share a card rather than sitting in three. */
+.hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(190px, 250px) minmax(0, 1fr);
+  grid-template-areas:
+    'figure tape'
+    'verdict verdict';
+  gap: 22px 34px;
+  padding: 24px 24px 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+/* The verdict in a colour, carried on the edge of the card rather than as a
+   tinted panel. A whole card in alert red for a $12 overspend is a fire alarm
+   for a dropped fork. */
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--living);
+}
+
+.hero-alert::before {
+  background: var(--alert);
+}
+
+.hero-neutral::before {
+  background: var(--line-strong);
+}
+
+.hero-headline {
+  grid-area: figure;
+}
+
+.hero-value {
+  margin-top: 6px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: clamp(38px, 5.2vw, 56px);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.045em;
+  line-height: 1;
+  color: var(--living);
+}
+
+.hero-alert .hero-value {
+  color: var(--alert);
+}
+
+.hero-neutral .hero-value {
+  color: var(--ink);
+}
+
+.hero-sub {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--ink-muted);
+}
+
+/* How full the limit is, with a mark for where it should be by today. Six
+   pixels and no legend: the words around it already say what it is, and a
+   second full-dress bar under the day tape would be two answers to one
+   question. */
+.hero-meter {
+  position: relative;
+  display: block;
+  height: 6px;
+  margin-top: 16px;
+  border-radius: 3px;
   background: var(--surface-sunk);
   border: 1px solid var(--line);
 }
 
-/* A tinted panel is reserved for the one state that has to interrupt someone.
-   Three reassuring green panels in a row is the resting state of this page, and
-   a colour that is always on carries no information — so "fine" is the quiet
-   card with a green figure on it, and only "over" takes the whole panel. */
-.tile-alert {
-  background: var(--alert-soft);
-  border-color: transparent;
+.hero-meter-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 3px;
+  background: var(--living);
+  opacity: 0.85;
 }
 
-.tile-value {
-  margin-top: 2px;
-  font-size: clamp(26px, 3.2vw, 36px);
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1;
+.hero-alert .hero-meter-fill {
+  background: var(--alert);
 }
 
-.tile-living .tile-value {
-  color: var(--living);
+.hero-neutral .hero-meter-fill {
+  background: var(--excluded);
 }
 
-.tile-alert .tile-value {
-  color: var(--alert);
+.hero-meter-mark {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 1px;
+  background: var(--ink);
+  opacity: 0.55;
 }
 
-.tile-note {
+.hero-tape {
+  grid-area: tape;
+  align-self: end;
+}
+
+.hero-verdict {
+  grid-area: verdict;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 14.5px;
+  line-height: 1.55;
+  max-width: 82ch;
+}
+
+.hero-verdict a {
+  color: var(--income);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+
+/* ----------------------------------------------------------------- tape -- */
+
+/* The period as its days. Solid columns are days that happened; hollow ones are
+   what the budget leaves for each day still to come, drawn at the same scale so
+   the comparison is made by looking rather than by dividing. */
+.tape-days {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 92px;
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.tape-day {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  border-radius: 2px 2px 0 0;
+}
+
+/* Weekends, because that is where discretionary spending lands and a run of
+   tall Saturdays is a different diagnosis from a tall Tuesday. A band along the
+   ground rather than a tinted column: the columns are the data, and a shaded
+   panel behind half of them competes with the thing it is meant to annotate. */
+.tape-day.is-weekend {
+  background: linear-gradient(var(--line) 0 0) bottom / 100% 4px no-repeat;
+}
+
+.tape-day.is-today {
+  border-bottom-color: var(--ink);
+}
+
+.tape-column {
+  width: 100%;
+  min-height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--living);
+  opacity: 0.8;
+}
+
+.tape-day.is-today .tape-column {
+  opacity: 1;
+}
+
+.tape-allowance {
+  width: 100%;
+  min-height: 2px;
+  border: 1px dashed var(--line-strong);
+  border-bottom: 0;
+  border-radius: 2px 2px 0 0;
+}
+
+.tape-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin-top: 10px;
   font-size: 12px;
   color: var(--ink-muted);
 }
 
-/* The delta is the last line of a tile, so its own top margin is enough. */
-.tile .headline-delta {
-  margin-top: auto;
-  padding-top: 8px;
+.tape-key-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
 }
 
-/* ---------------------------------------------------------- budget track -- */
-
-.track {
-  margin-top: 18px;
+.tape-swatch {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--living);
+  opacity: 0.8;
 }
 
-.track-bar {
+.tape-swatch-allowance {
+  background: none;
+  border: 1px dashed var(--line-strong);
+}
+
+/* The ends of the period, and where in it today falls. Without them the tape is
+   a shape; with them it is a calendar. */
+.tape-axis {
   position: relative;
-  height: 28px;
-  border-radius: var(--radius);
+  display: flex;
+  justify-content: space-between;
+  margin-top: 7px;
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+.tape-axis-today {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  padding: 0 4px;
+  background: var(--surface);
+  color: var(--ink-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- flows -- */
+
+/* Money in, money spent, money put away. One movement of money rather than
+   three statistics, so they are one row of equals rather than a set of tiles
+   competing for the eye. */
+.card-flat {
+  padding: 0;
+  overflow: hidden;
+}
+
+.flows {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(215px, 100%), 1fr));
+  gap: 1px;
+  background: var(--line);
+  margin: 0;
+}
+
+.flow {
+  padding: 18px 22px 20px;
+  background: var(--surface);
+}
+
+.flow dd {
+  margin: 0;
+}
+
+.flow-value {
+  display: block;
+  margin-top: 7px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: clamp(23px, 2.6vw, 29px);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+
+.flow-income .flow-value {
+  color: var(--income);
+}
+
+.flow-living .flow-value {
+  color: var(--living);
+}
+
+.flow-capital .flow-value {
+  color: var(--capital);
+}
+
+.flow-note {
+  display: block;
+  margin-top: 7px;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+/* The comparison is information, not a verdict, so it stays in faint ink
+   whichever way it points. Only spending is ever coloured - a page that paints
+   a quiet fortnight before payday red teaches its reader to ignore red. */
+.flow-delta {
+  display: block;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.flow-delta.is-alarming {
+  color: var(--alert);
+}
+
+/* -------------------------------------------------------------- pressure -- */
+
+.pressure {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pressure-row {
+  border-top: 1px solid var(--line);
+}
+
+.pressure-row:first-child {
+  border-top: 0;
+}
+
+.pressure-link {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(52px, 0.85fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 11px 0;
+  text-decoration: none;
+}
+
+.pressure-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-weight: 500;
+}
+
+.pressure-name .tag {
+  flex: 0 0 auto;
+}
+
+.pressure-link:hover .pressure-name {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.pressure-track {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
   background: var(--surface-sunk);
   border: 1px solid var(--line);
-  /* visible, not hidden: both marks overhang the track by design, and a mark
-     that lands under the fill is invisible without the overhang. */
-  overflow: visible;
 }
 
-.track-fill {
+.pressure-fill {
   position: absolute;
   inset: 0 auto 0 0;
   border-radius: 3px;
   opacity: 0.85;
 }
 
-/* The stretch between what has gone and where this pace lands. Same hue as the
-   fill, at a fraction of its weight — a forecast is the same kind of thing as
-   the spending it extends, not a different one. The hatch used elsewhere is
-   spoken for: in this app it means money that does not count. */
-.track-forecast {
+.pressure-mark {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  border-radius: 0 3px 3px 0;
-  opacity: 0.26;
-}
-
-/* Centred on the figure it marks rather than starting at it, so a mark that
-   lands on the end of the track straddles the edge instead of falling off it. */
-.track-mark {
-  position: absolute;
-  top: -4px;
-  bottom: -4px;
+  top: -3px;
+  bottom: -3px;
   width: 2px;
   transform: translateX(-50%);
-  background: var(--ink);
-  opacity: 0.55;
   border-radius: 1px;
+  background: var(--ink);
+  opacity: 0.5;
 }
 
-/* The limit itself, which has to win against the pace mark when they land close
-   together. Full height and full strength. */
-.track-mark-budget {
-  top: -6px;
-  bottom: -6px;
-  width: 3px;
-  opacity: 1;
+.pressure-figures {
+  text-align: right;
+  font-size: 13px;
+  white-space: nowrap;
 }
 
-.track-legend {
+.pressure-figures small {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+/* ----------------------------------------------------------------- feed -- */
+
+/* What actually went through, grouped by the day it landed on. The one thing a
+   page of totals cannot tell a daily reader. */
+.feed-day + .feed-day {
+  margin-top: 16px;
+}
+
+.feed-date {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.feed-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+
+.feed-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px 20px;
-  margin-top: 14px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+}
+
+.feed-row:first-child {
+  border-top: 0;
+}
+
+.feed-what {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.feed-what strong {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed-what small {
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+.feed-more {
+  display: inline-block;
+  margin-top: 16px;
   font-size: 12px;
   color: var(--ink-muted);
 }
 
-.track-legend > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
+/* The working behind the figures above, which is worth keeping and not worth
+   the weight of a card that competes with them. */
+.card-quiet {
+  background: transparent;
 }
 
-.track-key {
-  flex: 0 0 auto;
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  opacity: 0.85;
-}
-
-.track-key-forecast {
-  opacity: 0.26;
-}
-
-.track-key-mark {
-  flex: 0 0 auto;
-  width: 2px;
-  height: 12px;
-  background: var(--ink);
-  opacity: 0.55;
-  border-radius: 1px;
-}
-
-.track-key-mark-budget {
-  width: 3px;
-  opacity: 1;
-}
-
-.track-foot {
-  margin-top: 14px;
+@media (max-width: 900px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'figure'
+      'tape'
+      'verdict';
+  }
 }
 
 /* ----------------------------------------------------------- commentary -- */
@@ -870,34 +1209,6 @@ a.insight-body:hover .insight-headline {
 .chart-axis {
   font-size: 10px;
   fill: var(--ink-faint);
-  font-family: var(--font-mono), monospace;
-}
-
-/* The invested share sits above its own block and takes that block's colour, so
-   it is read as a label on the pale part rather than on the column as a whole. */
-.chart-share {
-  font-size: 10px;
-  fill: var(--capital);
-  font-family: var(--font-mono), monospace;
-  opacity: 0.9;
-  pointer-events: none;
-  /* A column that lands near the average ends up with its share sitting on the
-     dashed rule, so the label carries a thin cut-out of the card behind it. */
-  paint-order: stroke;
-  stroke: var(--surface);
-  stroke-width: 3px;
-  stroke-linejoin: round;
-}
-
-.chart-rule {
-  stroke: var(--ink-faint);
-  stroke-width: 1;
-  stroke-dasharray: 3 3;
-}
-
-.chart-rule-label {
-  font-size: 10px;
-  fill: var(--ink-muted);
   font-family: var(--font-mono), monospace;
 }
 

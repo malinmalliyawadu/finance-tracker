@@ -10,15 +10,8 @@
  * rather than buried in JSX.
  */
 
-import type {
-  BiggestPurchase,
-  Budget,
-  BudgetLine,
-  PaceComparison,
-  Sieve,
-  TrendPoint,
-} from './queries.ts'
-import { project } from './budget.ts'
+import type { BiggestPurchase, Budget, BudgetLine, Day, FlowPace, Sieve } from './queries.ts'
+import { project, usedShare } from './budget.ts'
 // Whole dollars throughout: this is prose, and cents in a sentence read as
 // precision that the claim around them does not have.
 import { moneyWhole, plural, shortDate } from './format.ts'
@@ -32,7 +25,7 @@ export type Reading = {
   sieve: Sieve
   budget: Budget
   /** Null once the period has closed: there is nothing left to forecast. */
-  pace: PaceComparison | null
+  pace: FlowPace | null
   /** Whole-period living costs, averaged over the other closed periods. */
   wholePeriodAverage: number
   biggest: BiggestPurchase | null
@@ -58,7 +51,7 @@ export type Comparison = {
  */
 export function comparisonFor(reading: Reading): Comparison {
   if (reading.partial && reading.pace) {
-    return { average: reading.pace.average, label: `vs average by day ${reading.elapsedDays}` }
+    return { average: reading.pace.spent.toDate, label: `vs average by day ${reading.elapsedDays}` }
   }
   return { average: reading.wholePeriodAverage, label: 'vs 12-period average' }
 }
@@ -85,7 +78,7 @@ export function forecastFor(reading: Reading): Forecast {
   if (!reading.partial) return { living: null, budget: null }
 
   const { pace, budget, sieve } = reading
-  const livingShare = pace && pace.wholeAverage > 0 ? pace.average / pace.wholeAverage : 0
+  const livingShare = pace && pace.spent.whole > 0 ? pace.spent.toDate / pace.spent.whole : 0
   const budgetShare = budget.total > 0 ? budget.expectedByNow / budget.total : 0
 
   return {
@@ -95,117 +88,299 @@ export function forecastFor(reading: Reading): Forecast {
 }
 
 // ---------------------------------------------------------------------------
-// Headline numbers
+// The headline
 // ---------------------------------------------------------------------------
 
-export type Tile = {
-  key: string
+export type Headline = {
+  /** What the big figure is. */
   label: string
   value: number
   tone: 'living' | 'alert' | 'neutral'
-  /** Sits under the value: what it is measured against. */
-  note: string
-  /** An arrow and a phrase, where there is a comparison worth colouring. */
-  delta?: { over: boolean; text: string }
+  /** Immediately under the figure: what it is a part of. */
+  sub: string
+  /** The one sentence the page exists to say. */
+  verdict: string
+  verdictTone: 'living' | 'warn' | 'alert' | 'neutral'
+  /** Where the sentence leads, when there is somewhere to go. */
+  href?: string
 }
 
 /**
- * The three numbers the page opens with: what has been spent, what the budget
- * has left, and where the period is heading.
+ * The single figure the page opens with, and the sentence that reads it.
  *
- * Only three, and never the same figure twice. A row of tiles that restates the
- * detail below it teaches someone to stop reading the detail.
+ * There is exactly one, and it is always the answer to the question someone
+ * opens this page holding: how much can I still spend? A row of tiles asking to
+ * be compared is what the rest of the page is for. Without a budget there is no
+ * such figure, so the headline falls back to what has been spent and says
+ * plainly that the question cannot be answered yet.
  */
-export function headlineTiles(reading: Reading): Tile[] {
+export function headlineFor(reading: Reading): Headline {
   const { budget, sieve, partial, elapsedDays, totalDays } = reading
   const comparison = comparisonFor(reading)
   const forecast = forecastFor(reading)
+  const daysLeft = Math.max(totalDays - elapsedDays, 0)
 
-  const living: Tile = {
-    key: 'living',
-    label: partial ? 'Living costs so far' : 'Living costs',
-    value: sieve.living,
-    tone: 'living',
-    note: partial ? `Day ${elapsedDays} of ${totalDays}` : 'The period in full',
-    delta:
+  if (!budget.exists) {
+    const against =
       comparison.average > 0
-        ? {
-            over: sieve.living > comparison.average,
-            text: `${Math.abs((sieve.living / comparison.average - 1) * 100).toFixed(0)}% ${comparison.label}`,
-          }
-        : undefined,
-  }
+        ? `${moneyWhole(Math.abs(sieve.living - comparison.average))} ${
+            sieve.living > comparison.average ? 'above' : 'below'
+          } ${comparison.label.replace('vs ', 'the ')}`
+        : 'the first period there is'
 
-  if (!budget.exists) return [living]
+    return {
+      label: partial ? 'Spent so far' : 'Spent this period',
+      value: sieve.living,
+      tone: 'neutral',
+      sub: partial ? `day ${elapsedDays} of ${totalDays}` : 'the period in full',
+      verdict: `That is ${against} - which is all this page can say about a figure with no limit to measure it against.`,
+      verdictTone: 'neutral',
+      href: '/budget',
+    }
+  }
 
   const remaining = budget.total - budget.spent
   const over = remaining < 0
-  const categories = plural(budget.budgeted.length, 'category', 'categories')
 
   if (!partial) {
-    return [
-      living,
-      {
-        key: 'standing',
-        label: over ? 'Over the budget by' : 'Under the budget by',
-        value: Math.abs(remaining),
-        tone: over ? 'alert' : 'living',
-        note: `${categories} budgeted`,
-      },
-      {
-        key: 'spent',
-        label: 'Spent against it',
-        value: budget.spent,
-        tone: 'neutral',
-        note: `of ${moneyWhole(budget.total)}`,
-      },
-    ]
+    return {
+      label: over ? 'Over the budget' : 'Left in the budget',
+      value: Math.abs(remaining),
+      tone: over ? 'alert' : 'living',
+      sub: `${moneyWhole(budget.spent)} used of a ${moneyWhole(budget.total)} budget`,
+      verdict: over
+        ? `This period finished ${moneyWhole(-remaining)} past its budget.`
+        : `This period finished ${moneyWhole(remaining)} inside its budget.`,
+      verdictTone: over ? 'alert' : 'living',
+      href: `/budget?period=${reading.periodStart}`,
+    }
   }
 
-  const standing: Tile = {
-    key: 'remaining',
-    label: over ? 'Over the budget' : 'Left in the budget',
+  const verdict = ((): { text: string; tone: Headline['verdictTone'] } => {
+    if (over) {
+      return {
+        text: `Already ${moneyWhole(-remaining)} past the budget with ${plural(daysLeft, 'day')} still to go.`,
+        tone: 'alert',
+      }
+    }
+
+    if (forecast.budget === null) {
+      return {
+        text: `Too early to call. The budget allows ${moneyWhole(budget.expectedByNow)} by day ${elapsedDays}, and ${moneyWhole(budget.spent)} has gone.`,
+        tone: 'neutral',
+      }
+    }
+
+    const gap = forecast.budget - budget.total
+
+    if (gap > 0) {
+      return {
+        text: `On this pace the period ends ${moneyWhole(gap)} over. Holding to ${moneyWhole(remaining / Math.max(daysLeft, 1))} a day for the last ${plural(daysLeft, 'day')} keeps it inside.`,
+        tone: 'warn',
+      }
+    }
+
+    return {
+      text: `On this pace the period ends ${moneyWhole(-gap)} inside the budget, with ${plural(daysLeft, 'day')} to go.`,
+      tone: 'living',
+    }
+  })()
+
+  return {
+    label: over ? 'Over the budget' : 'Left to spend',
     value: Math.abs(remaining),
     tone: over ? 'alert' : 'living',
-    note: `of ${moneyWhole(budget.total)} across ${categories}`,
+    sub: `${moneyWhole(budget.spent)} used of a ${moneyWhole(budget.total)} budget`,
+    verdict: verdict.text,
+    verdictTone: verdict.tone,
+    href: `/budget?period=${reading.periodStart}`,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Money in, money spent, money put away
+// ---------------------------------------------------------------------------
+
+/**
+ * Under this, a flow is doing what it always does. Pay lands a day early, one
+ * weekly shop falls on the wrong side of today, and a figure moves by a few
+ * percent for no reason worth reading into.
+ */
+const LEVEL = 0.08
+
+export type Flow = {
+  key: 'earned' | 'spent' | 'putAway'
+  label: string
+  value: number
+  tone: 'income' | 'living' | 'capital'
+  /** What it is measured against, in words. */
+  note: string
+  /**
+   * How it sits against its own history. Null when there is no history, or when
+   * the usual figure is too small to take a ratio of.
+   */
+  delta: {
+    direction: 'above' | 'below' | 'level'
+    text: string
+    /**
+     * Whether the direction is worth flagging. Only spending is ever flagged:
+     * a page that colours a quiet month's earnings red is moralising, not
+     * reporting.
+     */
+    alarming: boolean
+  } | null
+}
+
+function deltaAgainst(value: number, usual: number, flag: 'above' | null): Flow['delta'] {
+  if (!(usual > 0)) return null
+
+  const ratio = value / usual - 1
+  if (Math.abs(ratio) < LEVEL) {
+    return { direction: 'level', text: `about usual (${moneyWhole(usual)})`, alarming: false }
   }
 
-  // Too early to extrapolate from. Saying what the budget allows by today is
-  // the honest thing left to say, and it is the figure the pace marks are
-  // drawn from anyway.
-  if (forecast.budget === null) {
-    return [
-      living,
-      standing,
-      {
-        key: 'expected',
-        label: 'Expected by now',
-        value: budget.expectedByNow,
-        tone: 'neutral',
-        note: `what the budget allows by day ${elapsedDays}`,
-      },
-    ]
+  const direction = ratio > 0 ? 'above' : 'below'
+  return {
+    direction,
+    text: `${Math.abs(ratio * 100).toFixed(0)}% ${direction} the usual ${moneyWhole(usual)}`,
+    alarming: flag === direction,
   }
+}
 
-  const gap = forecast.budget - budget.total
+/**
+ * The three flows of a period: what came in, what was spent, and what was put
+ * away - each against what it usually is by this point.
+ *
+ * They are shown together because they are one movement of money rather than
+ * three statistics, and separately from the budget because the budget is a
+ * decision and these are facts. Every comparison is against the same day of
+ * prior periods, which matters most for income: pay arrives in one or two lumps
+ * near the end of a period, so on day twenty "earned" is not a small number,
+ * it is a number that has not happened yet.
+ */
+export function flowsFor(reading: Reading): Flow[] {
+  const { sieve, budget, partial, elapsedDays, pace } = reading
+  // A closed period compares against whole prior periods, which is what the
+  // same query returns once the day it is asked about is the last one.
+  const against = partial ? `by day ${elapsedDays}` : 'over the period'
+
+  const putAway = sieve.bands.find((band) => band.key === 'non_consumption')?.amount ?? 0
 
   return [
-    living,
-    standing,
     {
-      key: 'pace',
-      label: 'On this pace',
-      value: forecast.budget,
-      tone: gap > 0 ? 'alert' : 'living',
-      note: 'if the rest of the period runs like recent ones',
-      delta: {
-        over: gap > 0,
-        text: gap > 0
-          ? `${moneyWhole(gap)} past the budget`
-          : `${moneyWhole(-gap)} inside the budget`,
-      },
+      key: 'earned',
+      label: 'Earned',
+      value: sieve.income,
+      tone: 'income',
+      note: `what landed ${against}`,
+      delta: deltaAgainst(sieve.income, pace?.earned.toDate ?? 0, null),
+    },
+    {
+      key: 'spent',
+      label: 'Spent',
+      value: sieve.living,
+      tone: 'living',
+      // Never "of the budget": the budget covers what is put away as well, so
+      // the figure above is not a part of it and saying so would invite a
+      // subtraction that does not work.
+      note: `living costs ${against}`,
+      delta: deltaAgainst(sieve.living, pace?.spent.toDate ?? 0, 'above'),
+    },
+    {
+      key: 'putAway',
+      label: 'Put away',
+      value: putAway,
+      tone: 'capital',
+      note: 'investing, savings and loan principal',
+      delta: deltaAgainst(putAway, pace?.putAway.toDate ?? 0, null),
     },
   ]
+}
+
+// ---------------------------------------------------------------------------
+// Categories under pressure
+// ---------------------------------------------------------------------------
+
+export type Pressure = {
+  line: BudgetLine
+  /** How full the limit is, for drawing. */
+  used: number
+  /** Where the limit expects to be by today, for the mark on the bar. */
+  expected: number
+  /** Sorts the list. Never shown. */
+  rank: number
+}
+
+/**
+ * The budget lines worth looking at today, worst first.
+ *
+ * Ranked by how far past its own pace a category is rather than by how much it
+ * costs, because the largest line in a budget is the mortgage and it is never
+ * the problem. A category exactly on its pace ranks at zero, so the list runs
+ * out naturally: once everything is behaving, there is nothing at the top of it
+ * clamouring to be read.
+ */
+export function pressureFor(budget: Budget, partial: boolean, limit = 5): Pressure[] {
+  return budget.budgeted
+    .map((line) => {
+      const budgeted = line.budget ?? 0
+      const expected = partial ? line.expectedByNow : budgeted
+      const past = budgeted > 0 ? Math.max(line.spent - budgeted, 0) / budgeted : 0
+      const ahead = expected > 0 ? Math.max(line.spent - expected, 0) / expected : 0
+
+      return {
+        line,
+        used: usedShare(line.spent, budgeted),
+        expected: budgeted > 0 ? Math.min(expected / budgeted, 1) : 0,
+        // Anything already past its limit sorts above everything still inside
+        // one, however fast the rest are moving: an overspend has happened and
+        // a pace is a forecast. Within each group the ranking is relative, so a
+        // small category blowing its limit is not buried under a large one
+        // drifting a percent.
+        rank: (past > 0 ? 10 + past : 0) + ahead,
+      }
+    })
+    .filter((row) => row.rank > 0)
+    .sort((a, b) => b.rank - a.rank)
+    .slice(0, limit)
+}
+
+// ---------------------------------------------------------------------------
+// The period, day by day
+// ---------------------------------------------------------------------------
+
+export type DayTape = {
+  days: Day[]
+  /** The tallest day, which every column is drawn against. */
+  peak: number
+  /** What a day has cost on average so far, and the line drawn across the tape. */
+  perDay: number
+  /** What is left to spend per remaining day, or null without a budget to divide. */
+  allowancePerDay: number | null
+  daysLeft: number
+}
+
+/**
+ * The period as a run of days rather than a running total.
+ *
+ * A total answers "how much" and hides "when", and the two are different
+ * questions: thirty even days and one $900 Saturday add to the same figure and
+ * mean nothing alike. The days are also the only part of this page that shows
+ * yesterday, which is the thing someone checking daily actually came for.
+ */
+export function tapeFor(reading: Reading, days: Day[]): DayTape {
+  const { budget, elapsedDays, totalDays, sieve } = reading
+  const daysLeft = Math.max(totalDays - elapsedDays, 0)
+  const remaining = budget.total - budget.spent
+
+  return {
+    days,
+    peak: days.reduce((max, day) => Math.max(max, day.spent), 0),
+    perDay: elapsedDays > 0 ? sieve.living / elapsedDays : 0,
+    allowancePerDay:
+      budget.exists && daysLeft > 0 && remaining > 0 ? remaining / daysLeft : null,
+    daysLeft,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -264,17 +439,9 @@ export function insightsFor(reading: Reading): Insight[] {
   const remaining = budget.total - budget.spent
   const categoryHref = (id: string) => `/transactions?category=${id}&period=${periodStart}`
 
-  if (!budget.exists) {
-    found.push({
-      key: 'no-budget',
-      tone: 'neutral',
-      weight: 95,
-      headline: 'No budget for this period',
-      detail:
-        'With a limit per category this page can say whether a figure is a problem, rather than only what it is. Every box starts pre-filled with what the category has actually been costing.',
-      href: '/budget',
-    })
-  }
+  // Nothing here asks for a budget. The headline already does, in the largest
+  // type on the page, and being asked twice on one screen reads as nagging
+  // rather than as two findings.
 
   if (budget.exists && remaining < 0) {
     found.push({
@@ -442,38 +609,4 @@ export function insightsFor(reading: Reading): Insight[] {
   }
 
   return found.sort((a, b) => b.weight - a.weight).slice(0, MAX_INSIGHTS)
-}
-
-// ---------------------------------------------------------------------------
-// Trend
-// ---------------------------------------------------------------------------
-
-/**
- * The share of everything that left in a period which was put away rather than
- * spent, or null when there is no share to take.
- *
- * Investing and transfers are already drawn above living costs in the trend
- * chart, but a block's height only answers "how much"; this is the question
- * underneath it, and the one a column twice as tall as its neighbour makes
- * impossible to eyeball. The denominator is everything that went out, so the
- * complement is the share that was spent and the two always meet at 100%.
- *
- * Null rather than zero when nothing was put away: a "0%" over a column with no
- * pale block on it is a label for something that is not there.
- */
-export function investedShare(point: TrendPoint): number | null {
-  const out = point.living + point.nonConsumption
-  if (out <= 0 || point.nonConsumption <= 0) return null
-  return point.nonConsumption / out
-}
-
-/**
- * The same reading across every period shown, for the one-line summary a reader
- * who cannot see the columns is given instead of them.
- */
-export function investedShareAcross(points: TrendPoint[]): number | null {
-  const out = points.reduce((sum, p) => sum + p.living + p.nonConsumption, 0)
-  const capital = points.reduce((sum, p) => sum + p.nonConsumption, 0)
-  if (out <= 0 || capital <= 0) return null
-  return capital / out
 }

@@ -95,60 +95,142 @@ export async function getPeriods(): Promise<Period[]> {
 }
 
 /**
- * What spending looked like by this same day of the period, averaged over the
- * periods before it.
+ * One flow's history, at the same point in the period and over whole periods.
+ *
+ * The two are always taken from the same window of prior periods, because the
+ * ratio between them is the share of a typical period that has landed by now,
+ * and drawing them from different windows would make that ratio quietly wrong.
+ */
+export type PaceAverage = {
+  /** The flow by this same day of the period, averaged over prior periods. */
+  toDate: number
+  /** The same flow over whole prior periods. */
+  whole: number
+}
+
+export type FlowPace = {
+  /** How many prior periods the averages are taken over. Zero on a fresh ledger. */
+  periods: number
+  spent: PaceAverage
+  earned: PaceAverage
+  putAway: PaceAverage
+}
+
+/**
+ * What money in, money spent and money put away looked like by this same day of
+ * the period, averaged over the periods before it.
  *
  * Comparing a part-finished period against whole-period averages is the trap
  * this whole app exists to avoid: on day three it would report spending down
  * 90% and mean nothing. Pro-rating the average linearly is no better, because
  * rent, rates and subscriptions cluster rather than spreading evenly. The only
  * honest comparison is like-for-like against the same point in prior periods.
+ *
+ * Income needs this more than spending does, not less. Pay arrives in one or
+ * two lumps near the end of a period, so on day twenty "earned" is not a small
+ * number - it is a number that has not happened yet, and only the same day of
+ * previous periods can tell the two apart.
  */
-export async function getPaceComparison(
-  periodStart: string,
-  elapsedDays: number,
-): Promise<PaceComparison> {
-  const [row] = await db<{ average: string; whole_average: string; periods: number }[]>`
+export async function getFlowPace(periodStart: string, elapsedDays: number): Promise<FlowPace> {
+  const cutoff = Math.max(elapsedDays - 1, 0)
+
+  const [row] = await db<Record<string, string>[]>`
     with prior as (
       select distinct period_start from transactions
       where period_start < ${periodStart}
       order by period_start desc
       limit 12
     ),
-    by_day as (
-      select p.period_start,
-             coalesce(sum(-t.amount) filter (
-               where t.counts_as_spend
-                 and t.date <= p.period_start + ${Math.max(elapsedDays - 1, 0)}::integer), 0) as to_date,
-             coalesce(sum(-t.amount) filter (where t.counts_as_spend), 0)                      as whole
+    by_period as (
+      select
+        p.period_start,
+        coalesce(sum(-t.amount) filter (
+          where t.counts_as_spend and t.date <= p.period_start + ${cutoff}::integer), 0) as spent_to_date,
+        coalesce(sum(-t.amount) filter (where t.counts_as_spend), 0)                     as spent_whole,
+        coalesce(sum(t.amount)  filter (
+          where t.counts_as_income and t.date <= p.period_start + ${cutoff}::integer), 0) as earned_to_date,
+        coalesce(sum(t.amount)  filter (where t.counts_as_income), 0)                     as earned_whole,
+        coalesce(sum(-t.amount) filter (
+          where t.exclusion_reason is null and t.category_kind = 'expense' and not t.is_consumption
+            and t.date <= p.period_start + ${cutoff}::integer), 0)                        as put_away_to_date,
+        coalesce(sum(-t.amount) filter (
+          where t.exclusion_reason is null and t.category_kind = 'expense' and not t.is_consumption), 0)
+                                                                                          as put_away_whole
       from prior p
       left join transactions t on t.period_start = p.period_start
       group by p.period_start
     )
-    select coalesce(avg(to_date), 0) as average,
-           coalesce(avg(whole), 0)   as whole_average,
-           count(*)::int             as periods
-    from by_day
+    select
+      count(*)::int                        as periods,
+      coalesce(avg(spent_to_date), 0)      as spent_to_date,
+      coalesce(avg(spent_whole), 0)        as spent_whole,
+      coalesce(avg(earned_to_date), 0)     as earned_to_date,
+      coalesce(avg(earned_whole), 0)       as earned_whole,
+      coalesce(avg(put_away_to_date), 0)   as put_away_to_date,
+      coalesce(avg(put_away_whole), 0)     as put_away_whole
+    from by_period
   `
 
   return {
-    average: num(row?.average),
-    wholeAverage: num(row?.whole_average),
     periods: Number(row?.periods ?? 0),
+    spent: { toDate: num(row?.spent_to_date), whole: num(row?.spent_whole) },
+    earned: { toDate: num(row?.earned_to_date), whole: num(row?.earned_whole) },
+    putAway: { toDate: num(row?.put_away_to_date), whole: num(row?.put_away_whole) },
   }
 }
 
-export type PaceComparison = {
-  /** Living costs by this same day, averaged over the periods before this one. */
-  average: number
-  /**
-   * Whole-period living costs averaged over those same periods. Paired with
-   * `average` deliberately: the ratio between the two is the share of a typical
-   * period that has landed by now, and taking the two figures from different
-   * windows would make that ratio quietly wrong.
-   */
-  wholeAverage: number
-  periods: number
+// ---------------------------------------------------------------------------
+// The period, day by day
+// ---------------------------------------------------------------------------
+
+export type Day = {
+  date: string
+  /** 1-based day of the period. */
+  day: number
+  spent: number
+  /** Saturday or Sunday, which is where most discretionary spending lands. */
+  isWeekend: boolean
+  /** Still to come. Its figure is zero because nothing has happened, not because nothing was spent. */
+  isFuture: boolean
+}
+
+/**
+ * Every day of the period with what was spent on it, including the days nothing
+ * happened and the days that have not arrived.
+ *
+ * A running total answers "how much" and hides "when". The days themselves are
+ * what a period is made of, and one $900 Saturday reads completely differently
+ * from thirty even days that add to the same figure - which is the difference
+ * between a period that is over budget and a period that had a wedding in it.
+ */
+export async function getDays(periodStart: string): Promise<Day[]> {
+  const rows = await db<
+    { date: Date; day: number; spent: string; is_weekend: boolean; is_future: boolean }[]
+  >`
+    select
+      d.date::date                                          as date,
+      (d.date::date - ${periodStart}::date + 1)             as day,
+      coalesce(sum(-t.amount) filter (where t.counts_as_spend), 0) as spent,
+      extract(isodow from d.date) >= 6                      as is_weekend,
+      d.date::date > app_today()                            as is_future
+    from generate_series(
+      ${periodStart}::date,
+      statement_period_end(${periodStart}::date),
+      interval '1 day'
+    ) as d(date)
+    left join transactions t
+      on t.date = d.date::date and t.period_start = ${periodStart}
+    group by d.date
+    order by d.date
+  `
+
+  return rows.map((row) => ({
+    date: row.date.toISOString().slice(0, 10),
+    day: Number(row.day),
+    spent: num(row.spent),
+    isWeekend: row.is_weekend,
+    isFuture: row.is_future,
+  }))
 }
 
 // ---------------------------------------------------------------------------
