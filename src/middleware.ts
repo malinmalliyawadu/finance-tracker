@@ -46,8 +46,17 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 
 export const config = {
   /**
-   * Everything except Next's own static output and the favicon. Static assets
-   * carry no figures, and gating them means the login page loads unstyled.
+   * Everything except Next's own static output, the icons, and the manifest.
+   * Static assets carry no figures, and gating them means the login page loads
+   * unstyled.
+   *
+   * The manifest and the icons are on that list for a second reason: they are
+   * fetched to install the app to a home screen and to draw its tile, sometimes
+   * by the operating system rather than by the browser and so without the
+   * session cookie. Gated, those fetches are answered with the login page — and
+   * the failure is not an error anyone sees, it is an app that installs under
+   * the wrong name with a screenshot for an icon. Neither file says anything
+   * the login page does not already say out loud.
    */
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image|icons/|manifest\\.webmanifest|favicon\\.ico).*)'],
 }

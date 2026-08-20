@@ -1,4 +1,4 @@
-import { Rail } from '../../components/rail.tsx'
+import { Rail, TabBar } from '../../components/rail.tsx'
 import { authEnabled } from '../../lib/auth/session.ts'
 import { getHealth } from '../../lib/queries.ts'
 
@@ -16,6 +16,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           APP_PASSWORD unset the app is open and the button would do nothing. */}
       <Rail health={health} canSignOut={authEnabled()} />
       <main className="main">{children}</main>
+      <TabBar />
     </div>
   )
 }

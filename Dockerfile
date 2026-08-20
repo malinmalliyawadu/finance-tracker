@@ -37,6 +37,12 @@ RUN addgroup -S ledger && adduser -S ledger -G ledger
 COPY --from=builder --chown=ledger:ledger /app/.next/standalone ./
 COPY --from=builder --chown=ledger:ledger /app/.next/static ./.next/static
 
+# The standalone trace does not follow public/, because nothing imports it —
+# the manifest and the icons are only ever named in a <link>. Left out, the
+# app still serves and still works, and the only symptom is that installing it
+# to a home screen produces the wrong name and a screenshot for an icon.
+COPY --from=builder --chown=ledger:ledger /app/public ./public
+
 # The migration runner, the seeds and the sync jobs all ship with the image:
 # migrations run on boot (see CMD), the rest run as Coolify scheduled tasks
 # inside this same image. Node 24 runs the TypeScript directly.
