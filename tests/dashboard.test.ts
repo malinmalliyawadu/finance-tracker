@@ -223,10 +223,10 @@ describe('the headline', () => {
   })
 })
 
-describe('money in, spent and put away', () => {
+describe('money in, spent, put away and what that leaves', () => {
   const flowing = reading({ sieve: sieveOf(1200, 0, { income: 2400, putAway: 500 }) })
 
-  test('all three are read against the same day of prior periods', () => {
+  test('all four are read against the same day of prior periods', () => {
     const flows = flowsFor(flowing)
 
     assert.deepEqual(
@@ -235,6 +235,7 @@ describe('money in, spent and put away', () => {
         ['earned', 2400],
         ['spent', 1200],
         ['putAway', 500],
+        ['remainder', 700],
       ],
     )
     assert.equal(flows[0]!.delta?.direction, 'below', '$2,400 against a usual $3,000 by now')
@@ -251,6 +252,37 @@ describe('money in, spent and put away', () => {
       'a quiet fortnight before payday is not bad news',
     )
     assert.equal(flows[2]!.delta?.alarming, false)
+    assert.equal(
+      flows[3]!.delta?.alarming,
+      false,
+      'a thin remainder is the spending flag above it, not a second one',
+    )
+  })
+
+  test('the remainder is what the other three leave', () => {
+    const flows = flowsFor(flowing)
+
+    assert.equal(flows[3]!.label, 'Left over')
+    assert.equal(flows[3]!.tone, 'remainder')
+    // Against a usual $3,000 in, $1,000 spent and $400 put away by now.
+    assert.equal(flows[3]!.delta?.direction, 'below', '$700 against a usual $1,600 by now')
+  })
+
+  test('going backwards is stated as such, not as a minus sign', () => {
+    const behind = flowsFor(reading({ sieve: sieveOf(1200, 0, { income: 1000, putAway: 300 }) }))
+
+    assert.equal(behind[3]!.label, 'Short by')
+    assert.equal(behind[3]!.value, 500, 'the sign is carried by the label, not the figure')
+    assert.equal(behind[3]!.tone, 'alert')
+    // Not "129% below": a ratio taken across zero buries what happened.
+    assert.equal(behind[3]!.delta?.text, 'usually $1,600 in hand by now')
+  })
+
+  test('square to the cent is square, never "-$0"', () => {
+    const square = flowsFor(reading({ sieve: sieveOf(1000, 0, { income: 1000.001 }) }))
+
+    assert.equal(square[3]!.label, 'Left over')
+    assert.equal(square[3]!.tone, 'remainder')
   })
 
   test('a few percent either way is not a signal', () => {
@@ -265,7 +297,7 @@ describe('money in, spent and put away', () => {
     const fresh = flowsFor(reading({ pace: null }))
     assert.deepEqual(
       fresh.map((f) => f.delta),
-      [null, null, null],
+      [null, null, null, null],
     )
   })
 })

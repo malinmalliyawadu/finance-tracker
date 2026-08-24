@@ -898,9 +898,9 @@ button.rail-quick-link {
 
 /* ---------------------------------------------------------------- flows -- */
 
-/* Money in, money spent, money put away. One movement of money rather than
-   three statistics, so they are one row of equals rather than a set of tiles
-   competing for the eye. */
+/* Money in, money spent, money put away, and what those leave. One movement of
+   money rather than four statistics, so they are one row of equals rather than
+   a set of tiles competing for the eye. */
 .card-flat {
   padding: 0;
   overflow: hidden;
@@ -908,7 +908,7 @@ button.rail-quick-link {
 
 .flows {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(215px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(185px, 100%), 1fr));
   gap: 1px;
   background: var(--line);
   margin: 0;
@@ -944,6 +944,17 @@ button.rail-quick-link {
 
 .flow-capital .flow-value {
   color: var(--capital);
+}
+
+/* The remainder is not a kind of money, so it borrows no note's colour - plain
+   ink until the period stops paying for itself, and then the app's one colour
+   for something that needs a decision. */
+.flow-remainder .flow-value {
+  color: var(--ink);
+}
+
+.flow-alert .flow-value {
+  color: var(--alert);
 }
 
 .flow-note {
