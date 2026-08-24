@@ -8,11 +8,15 @@ const ARROW: Record<'above' | 'below' | 'level', string> = {
 }
 
 /**
- * What came in, what was spent, and what was put away, side by side.
+ * What came in, what was spent, what was put away, and what those leave, side
+ * by side.
  *
- * One movement of money rather than three statistics, so they are read as a
+ * One movement of money rather than four statistics, so they are read as a
  * row and not as tiles: same size, same weight, distinguished only by the
- * colour the rest of the app already uses for each kind of money.
+ * colour the rest of the app already uses for each kind of money. The remainder
+ * has no colour of its own because it is not a kind of money - it is the
+ * subtraction the other three are asking to have done, and it takes ink until
+ * the period stops paying for itself.
  *
  * Only spending is ever flagged. A quiet fortnight for income on day ten is not
  * bad news, it is a fortnight before payday, and a page that paints it red

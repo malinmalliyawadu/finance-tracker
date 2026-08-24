@@ -198,7 +198,7 @@ export function headlineFor(reading: Reading): Headline {
 }
 
 // ---------------------------------------------------------------------------
-// Money in, money spent, money put away
+// Money in, money spent, money put away, and what that leaves
 // ---------------------------------------------------------------------------
 
 /**
@@ -209,10 +209,10 @@ export function headlineFor(reading: Reading): Headline {
 const LEVEL = 0.08
 
 export type Flow = {
-  key: 'earned' | 'spent' | 'putAway'
+  key: 'earned' | 'spent' | 'putAway' | 'remainder'
   label: string
   value: number
-  tone: 'income' | 'living' | 'capital'
+  tone: 'income' | 'living' | 'capital' | 'remainder' | 'alert'
   /** What it is measured against, in words. */
   note: string
   /**
@@ -234,6 +234,17 @@ export type Flow = {
 function deltaAgainst(value: number, usual: number, flag: 'above' | null): Flow['delta'] {
   if (!(usual > 0)) return null
 
+  // A ratio taken across zero is arithmetic rather than information: "280%
+  // below" describes a period that went backwards against ones that did not,
+  // and the plain figure says that where the percentage only buries it.
+  if (value < 0) {
+    return {
+      direction: 'below',
+      text: `usually ${moneyWhole(usual)} in hand by now`,
+      alarming: false,
+    }
+  }
+
   const ratio = value / usual - 1
   if (Math.abs(ratio) < LEVEL) {
     return { direction: 'level', text: `about usual (${moneyWhole(usual)})`, alarming: false }
@@ -248,15 +259,21 @@ function deltaAgainst(value: number, usual: number, flag: 'above' | null): Flow[
 }
 
 /**
- * The three flows of a period: what came in, what was spent, and what was put
- * away - each against what it usually is by this point.
+ * The flows of a period: what came in, what was spent, what was put away, and
+ * what those leave - each against what it usually is by this point.
  *
  * They are shown together because they are one movement of money rather than
- * three statistics, and separately from the budget because the budget is a
+ * four statistics, and separately from the budget because the budget is a
  * decision and these are facts. Every comparison is against the same day of
  * prior periods, which matters most for income: pay arrives in one or two lumps
  * near the end of a period, so on day twenty "earned" is not a small number,
  * it is a number that has not happened yet.
+ *
+ * The remainder closes the row: the first three are money moving, and the
+ * fourth is the only one of the four that answers whether the period is paying
+ * for itself. It is stated as the subtraction of the three figures beside it
+ * and nothing more - not a change in bank balance, which also moves on
+ * transfers, card settlements and outflows too vague to categorise.
  */
 export function flowsFor(reading: Reading): Flow[] {
   const { sieve, budget, partial, elapsedDays, pace } = reading
@@ -265,6 +282,15 @@ export function flowsFor(reading: Reading): Flow[] {
   const against = partial ? `by day ${elapsedDays}` : 'over the period'
 
   const putAway = sieve.bands.find((band) => band.key === 'non_consumption')?.amount ?? 0
+  const remainder = sieve.income - sieve.living - putAway
+  // A cent of rounding either side of square is square, and "-$0" is a figure
+  // no one should ever be shown.
+  const short = remainder < -0.005
+  // From the same day of the same prior periods as everything else, so a
+  // remainder still waiting on payday is compared against one that was too.
+  const usualRemainder = pace
+    ? pace.earned.toDate - pace.spent.toDate - pace.putAway.toDate
+    : 0
 
   return [
     {
@@ -293,6 +319,19 @@ export function flowsFor(reading: Reading): Flow[] {
       tone: 'capital',
       note: 'investing, savings and loan principal',
       delta: deltaAgainst(putAway, pace?.putAway.toDate ?? 0, null),
+    },
+    {
+      key: 'remainder',
+      // Never "left to spend": that is the budget's phrase for a decision that
+      // has been made, and this is what actually happened to the money.
+      label: short ? 'Short by' : 'Left over',
+      value: Math.abs(remainder),
+      // Carried by the figure's own colour rather than by a delta. Being short
+      // is the arithmetic consequence of the two figures beside it, and
+      // flagging it as well would paint one overspent period red twice.
+      tone: short ? 'alert' : 'remainder',
+      note: short ? 'more went out than came in' : 'what came in, less both',
+      delta: deltaAgainst(remainder, usualRemainder, null),
     },
   ]
 }
