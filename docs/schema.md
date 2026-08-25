@@ -209,8 +209,21 @@ constraint enriched_single_classification check (
 ```
 
 That constraint is what makes "classified exactly once" a property of the
-database rather than a hope the reconciliation test checks after the fact. The
-`reconciliation` view then reduces to arithmetic:
+database rather than a hope the reconciliation test checks after the fact.
+
+It only constrains one layer, though, and that gap cost a production bug. The
+constraint governs `transactions_enriched`, the rule output; what the app
+displays is the *effective* classification, which is the rule output with any
+manual override applied, resolved in the `eff` lateral of the `transactions`
+view. `reconciliation` originally filtered some buckets on the effective answer
+and others on the raw rule output, so the moment an override changed whether a
+transaction was excluded - the commonest thing an override does - the row landed
+in two buckets or in none, and the totals silently drifted by however much money
+had been corrected by hand. Every bucket now reads the effective layer, and the
+bucket is chosen by a single `case` rather than by five filters that have to be
+checked against each other. See `db/migrations/0010_reconcile_effective_classification.sql`.
+
+The `reconciliation` view then reduces to arithmetic:
 
 ```
 net_cash = income_signed + spend_signed + non_consumption_signed

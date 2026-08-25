@@ -11,6 +11,7 @@
 
 import assert from 'node:assert/strict'
 import { after, before, describe, test } from 'node:test'
+import type postgres from 'postgres'
 
 import { connect } from '../src/lib/db.ts'
 
@@ -99,6 +100,100 @@ describe('reconciliation', () => {
     )
   })
 
+  /**
+   * The identity above is checked against whatever happens to be in the ledger,
+   * so it only fails once real money has already gone missing from the page.
+   * This builds the two shapes that broke it - an override that excludes
+   * something the rules classified, and an override that reclaims something the
+   * rules excluded - and measures what each one moves.
+   *
+   * The two errors have opposite signs, so a ledger holding both can net back
+   * to a small drift, or to none, while every figure on the page is wrong. That
+   * is why this asserts the movement of each bucket and not only the total.
+   * Everything happens inside a transaction that is always rolled back, so the
+   * ledger it runs against is untouched.
+   */
+  test('an override moves money between buckets, never out of them or into two', async () => {
+    const rollback = Symbol('rollback')
+    let opening: Buckets | undefined
+    let closing: Buckets | undefined
+
+    try {
+      await sql.begin(async (tx) => {
+        opening = await buckets(tx)
+
+        const [account] = await tx<{ id: string }[]>`
+          insert into accounts (external_id, name, source)
+          values ('recon_test_account', 'Reconciliation fixture', 'akahu')
+          returning id
+        `
+        const [category] = await tx<{ id: string }[]>`
+          insert into categories (name, slug, kind, is_consumption)
+          values ('Reconciliation fixture spend', 'recon-fixture-spend', 'expense', true)
+          returning id
+        `
+
+        const raw = await tx<{ id: string; external_id: string }[]>`
+          insert into transactions_raw (external_id, account_id, date, description, amount, raw)
+          select v.ext, ${account!.id}, app_today(), v.descr, v.amt, '{}'::jsonb
+          from (values
+            ('recon_excluded_by_hand', 'Rules said groceries, human said transfer', -820.00),
+            ('recon_reclaimed_by_hand', 'Rules said transfer, human said groceries', -250.00)
+          ) as v(ext, descr, amt)
+          returning id, external_id
+        `
+        const id = (ext: string) => raw.find((r) => r.external_id === ext)!.id
+
+        // What the rules produced.
+        await tx`
+          insert into transactions_enriched (transaction_id, category_id, exclusion_reason, classified_by)
+          values
+            (${id('recon_excluded_by_hand')}, ${category!.id}, null, 'rule'),
+            (${id('recon_reclaimed_by_hand')}, null, 'internal_transfer', 'rule')
+        `
+
+        // What the human then said, exactly as the UI writes it.
+        await tx`
+          insert into overrides (transaction_id, exclusion_reason)
+          values (${id('recon_excluded_by_hand')}, 'internal_transfer')
+        `
+        await tx`
+          insert into overrides (transaction_id, category_id, force_included)
+          values (${id('recon_reclaimed_by_hand')}, ${category!.id}, true)
+        `
+
+        closing = await buckets(tx)
+
+        throw rollback
+      })
+    } catch (error) {
+      if (error !== rollback) throw error
+    }
+
+    assert.ok(opening && closing, 'the fixture transaction did not run')
+    const moved = (key: keyof Buckets) => round2(closing![key] - opening![key])
+
+    assert.equal(moved('net_cash'), -1070, 'the two fixture rows are -820 and -250')
+
+    // The hand exclusion belongs in excluded and nowhere else. Under the old
+    // view it left spend without arriving here, and -820 simply vanished.
+    assert.equal(moved('excluded_signed'), -820, 'a hand exclusion must land in excluded')
+
+    // The reclaimed transfer belongs in spend and nowhere else. Under the old
+    // view it arrived here while still being counted as excluded.
+    assert.equal(moved('spend_signed'), -250, 'a hand category must land in spend')
+
+    assert.equal(moved('income_signed'), 0)
+    assert.equal(moved('non_consumption_signed'), 0)
+    assert.equal(moved('unclassified_signed'), 0)
+
+    // Neither override is a rule match, but both are classified by a human, so
+    // coverage must not treat them as unmatched.
+    assert.equal(moved('unmatched_count'), 0, 'an overridden transaction is classified')
+
+    assert.equal(moved('drift'), 0, `two overrides put the ledger out by ${moved('drift')}`)
+  })
+
   test('categorisation coverage stays above 99%', async () => {
     const total = Number(recon.raw_count)
     if (total === 0) return
@@ -114,4 +209,39 @@ describe('reconciliation', () => {
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100
+}
+
+type Buckets = {
+  net_cash: number
+  income_signed: number
+  spend_signed: number
+  non_consumption_signed: number
+  excluded_signed: number
+  unclassified_signed: number
+  unmatched_count: number
+  drift: number
+}
+
+/** The whole view as numbers, so a fixture can be measured as a difference. */
+async function buckets(tx: postgres.TransactionSql): Promise<Buckets> {
+  const [row] = await tx<Record<string, string>[]>`select * from reconciliation`
+  const n = (key: string) => Number(row?.[key] ?? 0)
+
+  return {
+    net_cash: n('net_cash'),
+    income_signed: n('income_signed'),
+    spend_signed: n('spend_signed'),
+    non_consumption_signed: n('non_consumption_signed'),
+    excluded_signed: n('excluded_signed'),
+    unclassified_signed: n('unclassified_signed'),
+    unmatched_count: n('unmatched_count'),
+    drift: round2(
+      n('net_cash') -
+        (n('income_signed') +
+          n('spend_signed') +
+          n('non_consumption_signed') +
+          n('excluded_signed') +
+          n('unclassified_signed')),
+    ),
+  }
 }
