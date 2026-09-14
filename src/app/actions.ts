@@ -59,6 +59,39 @@ export async function recategorise(id: string, verdict: string): Promise<void> {
   revalidatePath('/', 'layout')
 }
 
+/**
+ * Removes a transaction from the ledger by hand.
+ *
+ * A tombstone, not a delete. The raw row stays where the sync put it, and the
+ * `transactions` view hides everything with a tombstone at read time, so the
+ * row leaves every total at once and the next sync or re-import cannot bring
+ * it back: they upsert on the natural key, and the tombstone is keyed on the
+ * row that already exists.
+ */
+export async function deleteTransaction(id: string): Promise<void> {
+  if (!id) return
+
+  await db`
+    insert into deleted_transactions (transaction_id)
+    values (${id})
+    on conflict (transaction_id) do nothing
+  `
+
+  revalidatePath('/', 'layout')
+}
+
+/**
+ * Puts a deleted transaction back. Any override it carried was never touched,
+ * so it returns with the category it had.
+ */
+export async function restoreTransaction(id: string): Promise<void> {
+  if (!id) return
+
+  await db`delete from deleted_transactions where transaction_id = ${id}`
+
+  revalidatePath('/', 'layout')
+}
+
 export type ImportState =
   | { status: 'idle' }
   | { status: 'error'; message: string }

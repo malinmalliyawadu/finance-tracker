@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useOptimistic, useTransition } from 'react'
 
-import { recategorise } from '../app/actions.ts'
+import { deleteTransaction, recategorise } from '../app/actions.ts'
 import type { TransactionRow } from '../lib/queries.ts'
 import { fullDate, money, shortDate, toDate } from '../lib/format.ts'
 
@@ -55,6 +55,9 @@ export function TransactionsTable({
             <th className="col-amount" style={{ width: 120 }}>
               Amount
             </th>
+            <th className="col-actions" style={{ width: 36 }}>
+              <span className="visually-hidden">Delete</span>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -93,6 +96,14 @@ function Row({
   // settles, the optimistic value drops and the server's answer takes over —
   // so a rejected verdict corrects itself rather than sticking.
   const [verdict, showVerdict] = useOptimistic(currentValue(row))
+
+  // Same idea for deletion: the row leaves the table the moment it is
+  // confirmed, and only comes back if the write fails.
+  const [removed, showRemoved] = useOptimistic(false)
+
+  if (removed) return null
+
+  const name = row.merchant ?? row.description
 
   return (
     <tr style={pending ? { opacity: 0.5 } : undefined}>
@@ -187,6 +198,30 @@ function Row({
         >
           {money(row.amount)}
         </span>
+      </td>
+
+      <td className="col-actions">
+        {/* A tombstone rather than a delete, so this is reversible from the
+            Deleted list - but the row does vanish from every total at once,
+            which is worth a question first. */}
+        <button
+          type="button"
+          className="row-delete"
+          aria-label={`Delete ${name}`}
+          title="Delete this transaction"
+          disabled={pending}
+          onClick={() => {
+            if (!window.confirm(`Delete "${name}" (${money(row.amount)})?\n\nIt leaves every total straight away. You can put it back from the Deleted list.`)) {
+              return
+            }
+            startTransition(async () => {
+              showRemoved(true)
+              await deleteTransaction(row.id)
+            })
+          }}
+        >
+          ×
+        </button>
       </td>
     </tr>
   )
