@@ -681,6 +681,52 @@ export async function getTransactions(filters: TransactionFilters = {}): Promise
   }))
 }
 
+export type DeletedTransactionRow = {
+  id: string
+  date: string
+  description: string
+  amount: number
+  account: string
+  deletedAt: string
+}
+
+/**
+ * Rows a human has removed by hand, most recently deleted first.
+ *
+ * Read from the raw table rather than the `transactions` view, which is the
+ * one place that hides them - this is the page for putting one back, so it
+ * needs to see them. Only the facts the raw row carries: a deleted row is out
+ * of the classification pipeline and has no effective category worth showing.
+ */
+export async function getDeletedTransactions(limit = 200): Promise<DeletedTransactionRow[]> {
+  const rows = await db<
+    {
+      id: string
+      date: Date
+      description: string
+      amount: string
+      account_name: string
+      deleted_at: Date
+    }[]
+  >`
+    select r.id, r.date, r.description, r.amount, a.name as account_name, d.deleted_at
+    from deleted_transactions d
+    join transactions_raw r on r.id = d.transaction_id
+    join accounts a         on a.id = r.account_id
+    order by d.deleted_at desc, r.date desc, r.id
+    limit ${limit}
+  `
+
+  return rows.map((row) => ({
+    id: row.id,
+    date: row.date.toISOString().slice(0, 10),
+    description: row.description,
+    amount: num(row.amount),
+    account: row.account_name,
+    deletedAt: row.deleted_at.toISOString(),
+  }))
+}
+
 export type BiggestPurchase = {
   /** Positive: the size of the outflow, not the signed amount. */
   amount: number

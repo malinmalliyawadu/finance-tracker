@@ -353,7 +353,7 @@ node scripts/sync.ts
 Optionally split the database credentials.
 `db/migrations/0004_roles_and_grants.sql` creates `finance_web` and
 `finance_sync` with different privileges — the web role cannot write the ledger,
-the sync role cannot write rules or overrides. Grant them login and point
+the sync role cannot write rules, overrides or manual deletions. Grant them login and point
 `DATABASE_URL_WEB` and `DATABASE_URL_SYNC` at them. Both fall back to
 `DATABASE_URL` when unset.
 

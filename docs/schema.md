@@ -7,6 +7,7 @@ erDiagram
     accounts            ||--o{ transactions_raw      : holds
     transactions_raw    ||--o| transactions_enriched : "derived, 1:1"
     transactions_raw    ||--o| overrides             : "manual verdict, 0:1"
+    transactions_raw    ||--o| deleted_transactions  : "tombstone, 0:1"
     categories          ||--o{ rules                 : "a category rule assigns"
     categories          ||--o{ transactions_enriched : classifies
     categories          ||--o{ overrides             : classifies
@@ -77,6 +78,11 @@ erDiagram
         bool   force_included
         text   note
     }
+    deleted_transactions {
+        uuid   transaction_id PK_FK
+        timestamptz deleted_at
+        text   note
+    }
     budget_lines {
         uuid    id PK
         uuid    category_id FK
@@ -139,6 +145,14 @@ The boundary is enforced, not just documented:
   Verified: override a transaction from Groceries to Eating out, run a full
   recompute, and the derived row still says Groceries while the effective
   category stays Eating out.
+- `deleted_transactions` is the same idea applied to deletion. A row deleted
+  from the UI is not removed from `transactions_raw` — the web role cannot, and
+  the next sync would upsert it straight back, because every source re-sends
+  what it already sent. Instead a tombstone is written, and the `transactions`
+  view filters on it, so the row leaves every total at once and nothing that
+  writes the ledger or the derived layer can undo it. `tests/deletion.test.ts`
+  runs the sync's own upsert against a deleted row and asserts it stays gone.
+  Keeping the raw row also makes the deletion reversible from the Deleted list.
 
 ### `categories` exists as a table, not a text column
 
@@ -403,14 +417,15 @@ is no longer "which rows may a client see" — the browser never sees any — bu
 | Role            | Reads      | Writes                                                   |
 | --------------- | ---------- | -------------------------------------------------------- |
 | `finance_owner` | everything | everything. Migrations only.                             |
-| `finance_web`   | everything | `overrides`, `rules`, `merchant_aliases`, `categories`, `budget_lines`, `settings`, `passkeys` |
+| `finance_web`   | everything | `overrides`, `deleted_transactions`, `rules`, `merchant_aliases`, `categories`, `budget_lines`, `settings`, `passkeys` |
 | `finance_sync`  | everything except `passkeys` | `accounts`, `transactions_raw`, `transactions_enriched`, `sync_runs` |
 
 The split is what makes the read-time override design safe: `finance_web` has no
 write access to the derived layer at all, so the UI's only way to recategorise a
-transaction is to write an override — which is exactly the behaviour we want,
-enforced by privileges rather than by convention. Symmetrically, `finance_sync`
-cannot touch rules or overrides.
+transaction is to write an override, and its only way to delete one is to write
+a tombstone — which is exactly the behaviour we want, enforced by privileges
+rather than by convention. Symmetrically, `finance_sync` cannot touch rules,
+overrides or tombstones.
 
 Both views are `security_invoker`, so they cannot become a hole around the
 privileges on the tables underneath them.
